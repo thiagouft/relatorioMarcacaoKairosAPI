@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Kairos Relatórios</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <a href="#" class="navbar-brand">Kairos Relatórios</a>
+            <div class="nav-links">
+                <span>Olá, {{ session['username'] }}</span>
+                <a href="{{ url_for('logout') }}">Sair</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Filters Section -->
+        <div class="card">
+            <h3>Filtros</h3>
+            <div class="filters">
+                <div class="filter-group">
+                    <label for="start_date">Data Início</label>
+                    <input type="date" id="start_date" class="form-control">
+                </div>
+                <div class="filter-group">
+                    <label for="end_date">Data Fim</label>
+                    <input type="date" id="end_date" class="form-control">
+                </div>
+                <button id="btn-search" class="btn btn-primary" style="width: auto;">Pesquisar</button>
+            </div>
+            <div id="error-msg" class="alert alert-danger" style="display: none;"></div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="card" id="results-card" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3>Resultados</h3>
+                <button id="btn-export" class="btn btn-success" style="width: auto;">Exportar Excel</button>
+            </div>
+            
+            <div class="loading" id="loading">Carregando dados...</div>
+            
+            <div class="table-container">
+                <table id="data-table">
+                    <thead>
+                        <tr>
+                            <th>Matrícula</th>
+                            <th>Relógio ID</th>
+                            <th>NSR</th>
+                            <th>Data</th>
+                            <th>Hora</th>
+                            <th>Dia</th>
+                            <th>Mês</th>
+                            <th>Ano</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination" id="pagination">
+                <!-- Pagination buttons will be inserted here -->
+            </div>
+        </div>
+
+        {% if is_admin %}
+        <!-- Admin Section -->
+        <div class="card">
+            <h3>Administração de Usuários</h3>
+            
+            <div style="display: flex; gap: 20px;">
+                <!-- Create User -->
+                <div style="flex: 1;">
+                    <h4>Criar Usuário</h4>
+                    <form method="POST" action="{{ url_for('create_user') }}">
+                        <div class="form-group">
+                            <label>Usuário</label>
+                            <input type="text" name="username" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Senha</label>
+                            <input type="password" name="password" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" name="is_admin"> Administrador
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Criar</button>
+                    </form>
+                </div>
+
+                <!-- Reset Password -->
+                <div style="flex: 1;">
+                    <h4>Resetar Senha</h4>
+                    <form method="POST" action="{{ url_for('reset_password') }}">
+                        <div class="form-group">
+                            <label>Usuário</label>
+                            <input type="text" name="username" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Nova Senha</label>
+                            <input type="password" name="new_password" class="form-control" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Alterar Senha</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <script>
+        let currentData = [];
+        const itemsPerPage = 10;
+        let currentPage = 1;
+
+        document.getElementById('btn-search').addEventListener('click', async () => {
+            const startDateInput = document.getElementById('start_date').value;
+            const endDateInput = document.getElementById('end_date').value;
+            const errorMsg = document.getElementById('error-msg');
+            const loading = document.getElementById('loading');
+            const resultsCard = document.getElementById('results-card');
+            const tbody = document.querySelector('#data-table tbody');
+
+            errorMsg.style.display = 'none';
+            
+            if (!startDateInput || !endDateInput) {
+                errorMsg.textContent = 'Por favor, selecione as datas de início e fim.';
+                errorMsg.style.display = 'block';
+                return;
+            }
+
+            // Format dates to DD-MM-YYYY for API
+            const formatDate = (dateStr) => {
+                const [y, m, d] = dateStr.split('-');
+                return `${d}-${m}-${y}`;
+            };
+
+            const payload = {
+                start_date: formatDate(startDateInput),
+                end_date: formatDate(endDateInput)
+            };
+
+            loading.style.display = 'block';
+            resultsCard.style.display = 'block';
+            tbody.innerHTML = ''; // Clear previous data
+
+            try {
+                const response = await fetch('/api/appointments', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || 'Erro na requisição');
+                }
+
+                currentData = result.data;
+                currentPage = 1;
+                renderTable();
+                renderPagination();
+
+            } catch (error) {
+                errorMsg.textContent = error.message;
+                errorMsg.style.display = 'block';
+            } finally {
+                loading.style.display = 'none';
+            }
+        });
+
+        document.getElementById('btn-export').addEventListener('click', async () => {
+            if (currentData.length === 0) {
+                alert('Sem dados para exportar.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ records: currentData })
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'relatorio_ponto.xlsx';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                } else {
+                    alert('Erro ao exportar arquivo.');
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                alert('Erro ao exportar arquivo.');
+            }
+        });
+
+        function renderTable() {
+            const tbody = document.querySelector('#data-table tbody');
+            tbody.innerHTML = '';
+
+            const start = (currentPage - 1) * itemsPerPage;
+            const end = start + itemsPerPage;
+            const pageData = currentData.slice(start, end);
+
+            pageData.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${row.Matricula}</td>
+                    <td>${row.RelogioID}</td>
+                    <td>${row.NumeroSerieRep}</td>
+                    <td>${row.DataFormatada}</td>
+                    <td>${row.HoraFormatada}</td>
+                    <td>${row.Dia}</td>
+                    <td>${row.Mes}</td>
+                    <td>${row.Ano}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function renderPagination() {
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+
+            const totalPages = Math.ceil(currentData.length / itemsPerPage);
+
+            if (totalPages <= 1) return;
+
+            // Previous
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = 'Anterior';
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    renderTable();
+                    renderPagination();
+                }
+            };
+            pagination.appendChild(prevBtn);
+
+            // Page Info
+            const info = document.createElement('span');
+            info.textContent = ` Página ${currentPage} de ${totalPages} `;
+            info.style.alignSelf = 'center';
+            pagination.appendChild(info);
+
+            // Next
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Próximo';
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => {
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    renderTable();
+                    renderPagination();
+                }
+            };
+            pagination.appendChild(nextBtn);
+        }
+    </script>
+</body>
+</html>

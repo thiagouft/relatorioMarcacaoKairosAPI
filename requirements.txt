@@ -1,0 +1,8 @@
+flask
+pyodbc
+sqlalchemy
+requests
+pandas
+openpyxl
+werkzeug
+python-dotenv
