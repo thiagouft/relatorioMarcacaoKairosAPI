@@ -194,13 +194,21 @@ def get_appointments():
     try:
         while page <= total_pages:
             payload = {
-                "IdsPessoa": [0], # Fetch all
                 "DataInicio": start_date,
                 "DataFim": end_date,
                 "CalculoNaoAtualizado": "true",
                 "Pagina": page,
                 "ResponseType": "AS400V1"
             }
+            
+            matricula = data.get('matricula')
+            if matricula and matricula.strip():
+                try:
+                    payload["CrachasPessoa"] = [int(matricula)]
+                except ValueError:
+                    return jsonify({'error': 'Matrícula deve ser um número'}), 400
+            else:
+                payload["IdsPessoa"] = [0]
             
             response = requests.post(
                 app.config['KAIROS_API_URL'],

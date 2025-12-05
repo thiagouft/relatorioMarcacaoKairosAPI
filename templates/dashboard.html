@@ -44,6 +44,10 @@
                     <label for="end_date">Data Fim</label>
                     <input type="date" id="end_date" class="form-control">
                 </div>
+                <div class="filter-group">
+                    <label for="matricula">Matrícula (Opcional)</label>
+                    <input type="text" id="matricula" class="form-control" placeholder="Todas">
+                </div>
                 <button id="btn-search" class="btn btn-primary" style="width: auto;">Pesquisar</button>
             </div>
             <div id="error-msg" class="alert alert-danger" style="display: none;"></div>
@@ -89,6 +93,7 @@
         document.getElementById('btn-search').addEventListener('click', async () => {
             const startDateInput = document.getElementById('start_date').value;
             const endDateInput = document.getElementById('end_date').value;
+            const matriculaInput = document.getElementById('matricula').value;
             const errorMsg = document.getElementById('error-msg');
             const loading = document.getElementById('loading');
             const resultsCard = document.getElementById('results-card');
@@ -110,7 +115,8 @@
 
             const payload = {
                 start_date: formatDate(startDateInput),
-                end_date: formatDate(endDateInput)
+                end_date: formatDate(endDateInput),
+                matricula: matriculaInput
             };
 
             loading.style.display = 'block';
