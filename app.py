@@ -230,11 +230,33 @@ def get_appointments():
             total_pages = resp_json.get('TotalPagina', 1)
             page += 1
             
+        # --- Fetch Employee Names (Unique) ---
+        unique_matriculas = list(set(r.get('Matricula') for r in all_records if r.get('Matricula')))
+        matricula_names = {}
+        
+        for mat in unique_matriculas:
+            try:
+                people_payload = {"Matricula": str(mat)}
+                p_response = requests.post(
+                    app.config['KAIROS_SEARCH_PEOPLE_URL'],
+                    json=people_payload,
+                    headers=app.config['KAIROS_HEADERS']
+                )
+                if p_response.status_code == 200:
+                    p_data = p_response.json()
+                    if p_data.get('Sucesso') and p_data.get('Obj'):
+                        # Assuming the first result is the correct one
+                        matricula_names[mat] = p_data['Obj'][0].get('Nome', '')
+            except Exception as e:
+                print(f"Error fetching name for matricula {mat}: {e}")
+                
         # Process records for display
         processed_data = []
         for r in all_records:
+            mat = r.get('Matricula')
             processed_data.append({
-                "Matricula": r.get('Matricula'),
+                "Matricula": mat,
+                "Nome": matricula_names.get(mat, ''),
                 "RelogioID": r.get('RelogioID'),
                 "NumeroSerieRep": r.get('NumeroSerieRep'),
                 "Dia": r.get('Dia'),
@@ -267,8 +289,8 @@ def export_excel():
     df = pd.DataFrame(records)
     
     # Select and rename columns if needed, or just dump everything
-    # Based on requirement: "Matricula", "RelogioID", "NumeroSerieRep", "DataFormatada", "HoraFormatada"
-    columns_order = ["Matricula", "RelogioID", "NumeroSerieRep", "DataFormatada", "HoraFormatada"]
+    # Based on requirement: "Matricula", "Nome", "RelogioID", "NumeroSerieRep", "DataFormatada", "HoraFormatada"
+    columns_order = ["Matricula", "Nome", "RelogioID", "NumeroSerieRep", "DataFormatada", "HoraFormatada"]
     # Filter columns that actually exist in the data
     existing_cols = [col for col in columns_order if col in df.columns]
     df = df[existing_cols]

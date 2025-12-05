@@ -21,6 +21,7 @@ class Config:
 
     # Kairos API
     KAIROS_API_URL = "https://www.dimepkairos.com.br/RestServiceApi/Appointment/GetAppointmentsV2"
+    KAIROS_SEARCH_PEOPLE_URL = "https://www.dimepkairos.com.br/RestServiceApi/People/SearchPeople"
     KAIROS_HEADERS = {
         "Content-Type": "application/json",
         "key": os.environ.get('KAIROS_KEY'),

@@ -67,6 +67,7 @@
                     <thead>
                         <tr>
                             <th>Matrícula</th>
+                            <th>Nome</th>
                             <th>Relógio ID</th>
                             <th>NumeroSerieRep</th>
                             <th>Data</th>
@@ -192,6 +193,7 @@
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${row.Matricula}</td>
+                    <td>${row.Nome || ''}</td>
                     <td>${row.RelogioID}</td>
                     <td>${row.NumeroSerieRep}</td>
                     <td>${row.DataFormatada}</td>
@@ -209,37 +211,78 @@
 
             if (totalPages <= 1) return;
 
-            // Previous
-            const prevBtn = document.createElement('button');
-            prevBtn.textContent = 'Anterior';
-            prevBtn.disabled = currentPage === 1;
-            prevBtn.onclick = () => {
-                if (currentPage > 1) {
-                    currentPage--;
-                    renderTable();
-                    renderPagination();
+            const createButton = (text, page, isActive = false, isDisabled = false) => {
+                const btn = document.createElement('button');
+                btn.textContent = text;
+                if (isActive) btn.classList.add('active');
+                if (isDisabled) btn.disabled = true;
+                else {
+                    btn.onclick = () => {
+                        currentPage = page;
+                        renderTable();
+                        renderPagination();
+                    };
                 }
+                return btn;
             };
-            pagination.appendChild(prevBtn);
 
-            // Page Info
-            const info = document.createElement('span');
-            info.textContent = ` Página ${currentPage} de ${totalPages} `;
-            info.style.alignSelf = 'center';
-            pagination.appendChild(info);
+            // Previous Button
+            pagination.appendChild(createButton('Anterior', currentPage - 1, false, currentPage === 1));
 
-            // Next
-            const nextBtn = document.createElement('button');
-            nextBtn.textContent = 'Próximo';
-            nextBtn.disabled = currentPage === totalPages;
-            nextBtn.onclick = () => {
-                if (currentPage < totalPages) {
-                    currentPage++;
-                    renderTable();
-                    renderPagination();
+            // Smart Pagination Logic
+            const maxVisibleButtons = 5; // Number of buttons to show around current page
+
+            let startPage, endPage;
+
+            if (totalPages <= maxVisibleButtons + 2) {
+                // If total pages is small, show all
+                startPage = 1;
+                endPage = totalPages;
+            } else {
+                // Logic for ellipses
+                if (currentPage <= maxVisibleButtons - 2) {
+                    startPage = 1;
+                    endPage = maxVisibleButtons;
+                } else if (currentPage + (maxVisibleButtons - 3) >= totalPages) {
+                    startPage = totalPages - (maxVisibleButtons - 1);
+                    endPage = totalPages;
+                } else {
+                    startPage = currentPage - 2;
+                    endPage = currentPage + 2;
                 }
-            };
-            pagination.appendChild(nextBtn);
+            }
+
+            // First Page + Ellipsis
+            if (startPage > 1) {
+                pagination.appendChild(createButton('1', 1));
+                if (startPage > 2) {
+                    const ellipsis = document.createElement('span');
+                    ellipsis.textContent = '...';
+                    ellipsis.style.alignSelf = 'center';
+                    ellipsis.style.margin = '0 5px';
+                    pagination.appendChild(ellipsis);
+                }
+            }
+
+            // Page Numbers
+            for (let i = startPage; i <= endPage; i++) {
+                pagination.appendChild(createButton(i, i, i === currentPage));
+            }
+
+            // Last Page + Ellipsis
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    const ellipsis = document.createElement('span');
+                    ellipsis.textContent = '...';
+                    ellipsis.style.alignSelf = 'center';
+                    ellipsis.style.margin = '0 5px';
+                    pagination.appendChild(ellipsis);
+                }
+                pagination.appendChild(createButton(totalPages, totalPages));
+            }
+
+            // Next Button
+            pagination.appendChild(createButton('Próximo', currentPage + 1, false, currentPage === totalPages));
         }
     </script>
 </body>
