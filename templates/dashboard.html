@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-br">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,12 +8,16 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 </head>
+
 <body>
     <nav class="navbar">
         <div class="container">
             <a href="#" class="navbar-brand">Kairos Relatórios</a>
             <div class="nav-links">
                 <span>Olá, {{ session['username'] }}</span>
+                {% if is_admin %}
+                <a href="{{ url_for('admin_users') }}">Administração</a>
+                {% endif %}
                 <a href="{{ url_for('logout') }}">Sair</a>
             </div>
         </div>
@@ -20,11 +25,11 @@
 
     <div class="container">
         {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
         {% endwith %}
 
         <!-- Filters Section -->
@@ -50,9 +55,9 @@
                 <h3>Resultados</h3>
                 <button id="btn-export" class="btn btn-success" style="width: auto;">Exportar Excel</button>
             </div>
-            
+
             <div class="loading" id="loading">Carregando dados...</div>
-            
+
             <div class="table-container">
                 <table id="data-table">
                     <thead>
@@ -62,9 +67,6 @@
                             <th>NSR</th>
                             <th>Data</th>
                             <th>Hora</th>
-                            <th>Dia</th>
-                            <th>Mês</th>
-                            <th>Ano</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -77,52 +79,6 @@
                 <!-- Pagination buttons will be inserted here -->
             </div>
         </div>
-
-        {% if is_admin %}
-        <!-- Admin Section -->
-        <div class="card">
-            <h3>Administração de Usuários</h3>
-            
-            <div style="display: flex; gap: 20px;">
-                <!-- Create User -->
-                <div style="flex: 1;">
-                    <h4>Criar Usuário</h4>
-                    <form method="POST" action="{{ url_for('create_user') }}">
-                        <div class="form-group">
-                            <label>Usuário</label>
-                            <input type="text" name="username" class="form-control" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Senha</label>
-                            <input type="password" name="password" class="form-control" required>
-                        </div>
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" name="is_admin"> Administrador
-                            </label>
-                        </div>
-                        <button type="submit" class="btn btn-primary">Criar</button>
-                    </form>
-                </div>
-
-                <!-- Reset Password -->
-                <div style="flex: 1;">
-                    <h4>Resetar Senha</h4>
-                    <form method="POST" action="{{ url_for('reset_password') }}">
-                        <div class="form-group">
-                            <label>Usuário</label>
-                            <input type="text" name="username" class="form-control" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Nova Senha</label>
-                            <input type="password" name="new_password" class="form-control" required>
-                        </div>
-                        <button type="submit" class="btn btn-primary">Alterar Senha</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-        {% endif %}
     </div>
 
     <script>
@@ -139,7 +95,7 @@
             const tbody = document.querySelector('#data-table tbody');
 
             errorMsg.style.display = 'none';
-            
+
             if (!startDateInput || !endDateInput) {
                 errorMsg.textContent = 'Por favor, selecione as datas de início e fim.';
                 errorMsg.style.display = 'block';
@@ -234,9 +190,6 @@
                     <td>${row.NumeroSerieRep}</td>
                     <td>${row.DataFormatada}</td>
                     <td>${row.HoraFormatada}</td>
-                    <td>${row.Dia}</td>
-                    <td>${row.Mes}</td>
-                    <td>${row.Ano}</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -284,4 +237,5 @@
         }
     </script>
 </body>
+
 </html>

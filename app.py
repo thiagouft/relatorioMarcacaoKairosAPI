@@ -74,7 +74,7 @@ def login():
             log_action('Login realizado com sucesso')
             return redirect(url_for('dashboard'))
         else:
-            flash('Usuário ou senha inválidos', 'danger')
+            flash('Login ou senha inválidos', 'danger')
             
     return render_template('login.html')
 
@@ -100,7 +100,7 @@ def create_user():
     
     db = get_db_session()
     if db.query(User).filter_by(username=username).first():
-        flash('Usuário já existe.', 'danger')
+        flash('Login já existe.', 'danger')
         db.close()
         return redirect(url_for('dashboard'))
     
@@ -110,9 +110,9 @@ def create_user():
     db.commit()
     db.close()
     
-    log_action(f'Criou usuário: {username}')
-    flash(f'Usuário {username} criado com sucesso.', 'success')
-    return redirect(url_for('dashboard'))
+    log_action(f'Criou login: {username}')
+    flash(f'Login {username} criado com sucesso.', 'success')
+    return redirect(url_for('admin_users'))
 
 @app.route('/admin/reset_password', methods=['POST'])
 @admin_required
@@ -124,7 +124,7 @@ def reset_password():
     user = db.query(User).filter_by(username=username).first()
     
     if not user:
-        flash('Usuário não encontrado.', 'danger')
+        flash('Login não encontrado.', 'danger')
         db.close()
         return redirect(url_for('dashboard'))
     
@@ -132,9 +132,42 @@ def reset_password():
     db.commit()
     db.close()
     
-    log_action(f'Resetou senha do usuário: {username}')
+    log_action(f'Resetou senha do login: {username}')
     flash(f'Senha de {username} alterada com sucesso.', 'success')
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('admin_users'))
+
+@app.route('/admin/users')
+@admin_required
+def admin_users():
+    db = get_db_session()
+    users = db.query(User).all()
+    db.close()
+    return render_template('admin_users.html', users=users)
+
+@app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
+@admin_required
+def delete_user(user_id):
+    db = get_db_session()
+    user = db.query(User).get(user_id)
+    
+    if not user:
+        flash('Login não encontrado.', 'danger')
+        db.close()
+        return redirect(url_for('admin_users'))
+        
+    if user.username == 'admin':
+        flash('Não é possível excluir o login admin principal.', 'danger')
+        db.close()
+        return redirect(url_for('admin_users'))
+        
+    username = user.username
+    db.delete(user)
+    db.commit()
+    db.close()
+    
+    log_action(f'Excluiu login: {username}')
+    flash(f'Login {username} excluído com sucesso.', 'success')
+    return redirect(url_for('admin_users'))
 
 # --- Kairos API & Reports ---
 
@@ -205,6 +238,9 @@ def get_appointments():
                 "HoraFormatada": f"{r.get('Hora'):02d}:{r.get('Minuto'):02d}"
             })
             
+        # Sort by Date and Time
+        processed_data.sort(key=lambda x: (x['Ano'], x['Mes'], x['Dia'], x['Hora'], x['Minuto']))
+            
         log_action(f'Consultou apontamentos de {start_date} a {end_date}')
         return jsonify({'data': processed_data})
 
@@ -223,8 +259,8 @@ def export_excel():
     df = pd.DataFrame(records)
     
     # Select and rename columns if needed, or just dump everything
-    # Based on requirement: "Matricula", "RelogioID", "NumeroSerieRep","Dia", "Mes", "Ano", "Hora", "Minuto", "DataFormatada", "HoraFormatada"
-    columns_order = ["Matricula", "RelogioID", "NumeroSerieRep", "DataFormatada", "HoraFormatada", "Dia", "Mes", "Ano", "Hora", "Minuto"]
+    # Based on requirement: "Matricula", "RelogioID", "NumeroSerieRep", "DataFormatada", "HoraFormatada"
+    columns_order = ["Matricula", "RelogioID", "NumeroSerieRep", "DataFormatada", "HoraFormatada"]
     # Filter columns that actually exist in the data
     existing_cols = [col for col in columns_order if col in df.columns]
     df = df[existing_cols]
