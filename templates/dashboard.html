@@ -14,7 +14,7 @@
         <div class="container">
             <a href="#" class="navbar-brand">Kairos Relatórios</a>
             <div class="nav-links">
-                <span>Olá, {{ session['username'] }}</span>
+                <span>Olá, <span style="text-transform: capitalize;">{{ session['username'] }}</span></span>
                 {% if is_admin %}
                 <a href="{{ url_for('admin_users') }}">Administração</a>
                 {% endif %}
@@ -61,7 +61,6 @@
             </div>
 
             <div class="loading" id="loading">Carregando dados...</div>
-
             <div class="table-container">
                 <table id="data-table">
                     <thead>
@@ -287,6 +286,13 @@
             pagination.appendChild(createButton('Próximo', currentPage + 1, false, currentPage === totalPages));
         }
     </script>
+    <footer class="footer">
+        <div class="container footer-content">
+            <img src="{{ url_for('static', filename='images/mixestec_logo.png') }}" alt="Mixestec Logo"
+                class="footer-logo">
+            <p>Desenvolvido por Thiago Silva Pereira</p>
+        </div>
+    </footer>
 </body>
 
 </html>

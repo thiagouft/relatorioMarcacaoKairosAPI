@@ -38,8 +38,16 @@
                     <h4>Criar Login</h4>
                     <form method="POST" action="{{ url_for('create_user') }}">
                         <div class="form-group">
-                            <label>Login</label>
+                            <label>Nome Completo</label>
+                            <input type="text" name="full_name" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label>User Name (Login)</label>
                             <input type="text" name="username" class="form-control" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Email</label>
+                            <input type="email" name="email" class="form-control" required>
                         </div>
                         <div class="form-group">
                             <label>Senha</label>
@@ -59,7 +67,7 @@
                     <h4>Resetar Senha</h4>
                     <form method="POST" action="{{ url_for('reset_password') }}">
                         <div class="form-group">
-                            <label>Login</label>
+                            <label>Login (Username)</label>
                             <input type="text" name="username" class="form-control" required>
                         </div>
                         <div class="form-group">
@@ -77,8 +85,10 @@
                     <thead>
                         <tr>
                             <th>ID</th>
-                            <th>Login</th>
+                            <th>Nome</th>
+                            <th>Email</th>
                             <th>Admin</th>
+                            <th>Troca Senha?</th>
                             <th>Ações</th>
                         </tr>
                     </thead>
@@ -86,8 +96,10 @@
                         {% for user in users %}
                         <tr>
                             <td>{{ user.id }}</td>
-                            <td>{{ user.username }}</td>
+                            <td style="text-transform: capitalize;">{{ user.full_name }}</td>
+                            <td>{{ user.email }}</td>
                             <td>{{ 'Sim' if user.is_admin else 'Não' }}</td>
+                            <td>{{ 'Sim' if user.must_change_password else 'Não' }}</td>
                             <td>
                                 {% if user.username != 'admin' %}
                                 <form method="POST" action="{{ url_for('delete_user', user_id=user.id) }}"

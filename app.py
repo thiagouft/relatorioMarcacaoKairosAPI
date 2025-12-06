@@ -60,23 +60,64 @@ def index():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
+        email = request.form['email']
         password = request.form['password']
         
         db = get_db_session()
-        user = db.query(User).filter_by(username=username).first()
+        user = db.query(User).filter_by(email=email).first()
         db.close()
         
         if user and check_password_hash(user.password_hash, password):
             session['user_id'] = user.id
-            session['username'] = user.username
+            session['username'] = user.username # Keep for legacy or display
+            session['full_name'] = user.full_name
             session['is_admin'] = user.is_admin
+            session['must_change_password'] = user.must_change_password
+            
             log_action('Login realizado com sucesso')
+            
+            if user.must_change_password:
+                return redirect(url_for('change_password'))
+                
             return redirect(url_for('dashboard'))
         else:
-            flash('Login ou senha inválidos', 'danger')
+            flash('Email ou senha inválidos', 'danger')
             
     return render_template('login.html')
+
+@app.route('/change_password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    if request.method == 'POST':
+        new_password = request.form['new_password']
+        confirm_password = request.form['confirm_password']
+        
+        if new_password != confirm_password:
+            flash('As senhas não conferem.', 'danger')
+            return render_template('change_password.html')
+            
+        db = get_db_session()
+        user = db.query(User).get(session['user_id'])
+        
+        if user:
+            user.password_hash = generate_password_hash(new_password)
+            user.must_change_password = False
+            db.commit()
+            
+            session['must_change_password'] = False
+            flash('Senha alterada com sucesso.', 'success')
+            db.close()
+            return redirect(url_for('dashboard'))
+        
+        db.close()
+        
+    return render_template('change_password.html')
+
+@app.before_request
+def check_password_change_required():
+    if 'user_id' in session and session.get('must_change_password'):
+        if request.endpoint not in ['change_password', 'logout', 'static']:
+            return redirect(url_for('change_password'))
 
 @app.route('/logout')
 def logout():
@@ -94,24 +135,41 @@ def dashboard():
 @app.route('/admin/create_user', methods=['POST'])
 @admin_required
 def create_user():
+    email = request.form['email']
+    full_name = request.form['full_name']
     username = request.form['username']
     password = request.form['password']
     is_admin = 'is_admin' in request.form
     
     db = get_db_session()
-    if db.query(User).filter_by(username=username).first():
-        flash('Login já existe.', 'danger')
+    
+    # Check if email exists
+    if db.query(User).filter_by(email=email).first():
+        flash('Email já cadastrado.', 'danger')
         db.close()
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('admin_users'))
+
+    # Check if username exists
+    if db.query(User).filter_by(username=username).first():
+        flash('User Name (Login) já cadastrado.', 'danger')
+        db.close()
+        return redirect(url_for('admin_users'))
     
     hashed_password = generate_password_hash(password)
-    new_user = User(username=username, password_hash=hashed_password, is_admin=is_admin)
+    new_user = User(
+        username=username, 
+        email=email,
+        full_name=full_name,
+        password_hash=hashed_password, 
+        is_admin=is_admin,
+        must_change_password=True
+    )
     db.add(new_user)
     db.commit()
     db.close()
     
-    log_action(f'Criou login: {username}')
-    flash(f'Login {username} criado com sucesso.', 'success')
+    log_action(f'Criou usuário: {email}')
+    flash(f'Usuário {full_name} ({email}) criado com sucesso.', 'success')
     return redirect(url_for('admin_users'))
 
 @app.route('/admin/reset_password', methods=['POST'])

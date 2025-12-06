@@ -30,9 +30,12 @@ Base = declarative_base()
 class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True)
-    username = Column(String(50), unique=True, nullable=False)
+    username = Column(String(50), unique=True, nullable=False) # Keeping for internal ref or legacy, but login will be email
+    email = Column(String(120), unique=True, nullable=False)
+    full_name = Column(String(100), nullable=True)
     password_hash = Column(String(255), nullable=False)
     is_admin = Column(Boolean, default=False)
+    must_change_password = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 class Log(Base):
@@ -56,10 +59,17 @@ def init_db():
     if not admin:
         print("Creating admin user...")
         hashed_password = generate_password_hash('admin123') # Default password
-        new_admin = User(username='admin', password_hash=hashed_password, is_admin=True)
+        new_admin = User(
+            username='admin', 
+            email='admin@kairos.com',
+            full_name='Administrador',
+            password_hash=hashed_password, 
+            is_admin=True,
+            must_change_password=False
+        )
         session.add(new_admin)
         session.commit()
-        print("Admin user created. Username: admin, Password: admin123")
+        print("Admin user created. Email: admin@kairos.com, Password: admin123")
     else:
         print("Admin user already exists.")
     
