@@ -68,6 +68,7 @@
                         <tr>
                             <th>Matrícula</th>
                             <th>Nome</th>
+                            <th>Local</th>
                             <th>Relógio ID</th>
                             <th>NumeroSerieRep</th>
                             <th>Data</th>
@@ -194,6 +195,7 @@
                 tr.innerHTML = `
                     <td>${row.Matricula}</td>
                     <td>${row.Nome || ''}</td>
+                    <td>${row.Local || ''}</td>
                     <td>${row.RelogioID}</td>
                     <td>${row.NumeroSerieRep}</td>
                     <td>${row.DataFormatada}</td>

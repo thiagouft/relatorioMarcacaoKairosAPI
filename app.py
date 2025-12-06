@@ -173,7 +173,7 @@ def delete_user(user_id):
 
 def fetch_all_employees_map():
     """
-    Fetches all employees from Kairos API and returns a dictionary {Matricula: Nome}.
+    Fetches all employees from Kairos API and returns a dictionary {Matricula: {'Nome': ..., 'Cracha': ...}}.
     Iterates through all pages.
     """
     employees_map = {}
@@ -200,8 +200,9 @@ def fetch_all_employees_map():
                         for person in data['Obj']:
                             mat = person.get('Matricula')
                             nome = person.get('Nome')
+                            cracha = person.get('Cracha')
                             if mat:
-                                employees_map[str(mat)] = nome
+                                employees_map[str(mat)] = {'Nome': nome, 'Cracha': cracha}
             
             page += 1
             
@@ -209,6 +210,35 @@ def fetch_all_employees_map():
         print(f"Error fetching all employees: {e}")
         
     return employees_map
+
+# --- Clock Groups Mapping ---
+CLOCK_GROUPS = {
+  "P10": [1, 2, 11, 23],
+  "COCA": [3, 14, 27, 31],
+  "CANTEIRO III": [4, 7, 10, 17, 18, 22, 24, 25],
+  "PIPE MARABA": [5, 9, 20],
+  "OFICINA II": [8],
+  "PIPE SAO FELIX": [15, 28],
+  "TREINAMENTO": [16],
+  "RH": [13],
+  "P12": [6, 12],
+  "PIPE FERROV.": [21, 32],
+  "TENDA MOTORISTAS III": [26],
+  "NAUTICA": [30],
+  "TERRAPLENAGEM IV": [19, 29],
+}
+
+def get_location_by_clock_id(clock_id):
+    if clock_id is None:
+        return ""
+    try:
+        cid = int(clock_id)
+        for location, ids in CLOCK_GROUPS.items():
+            if cid in ids:
+                return location
+    except (ValueError, TypeError):
+        pass
+    return ""
 
 # --- Kairos API & Reports ---
 
@@ -222,11 +252,18 @@ def get_appointments():
     if not start_date or not end_date:
         return jsonify({'error': 'Datas de início e fim são obrigatórias'}), 400
         
-    # Validation: Max 30 days
+    # Validation
     d1 = datetime.datetime.strptime(start_date, "%d-%m-%Y")
     d2 = datetime.datetime.strptime(end_date, "%d-%m-%Y")
-    if abs((d2 - d1).days) > 30:
-         return jsonify({'error': 'O intervalo máximo é de 30 dias'}), 400
+    days_diff = abs((d2 - d1).days)
+
+    req_matricula = data.get('matricula')
+    if req_matricula and req_matricula.strip():
+        if days_diff > 60:
+             return jsonify({'error': 'Para consulta individual, o intervalo máximo é de 60 dias'}), 400
+    else:
+        if days_diff > 5:
+             return jsonify({'error': 'Para consulta geral, o intervalo máximo é de 5 dias'}), 400
 
     all_records = []
     page = 1
@@ -271,8 +308,8 @@ def get_appointments():
             total_pages = resp_json.get('TotalPagina', 1)
             page += 1
             
-        # --- Fetch Employee Names ---
-        matricula_names = {}
+        # --- Fetch Employee Names & Cracha ---
+        employees_info = {}
         
         # If searching by specific matricula, fetch just that one
         if matricula and matricula.strip():
@@ -286,25 +323,38 @@ def get_appointments():
                 if p_response.status_code == 200:
                     p_data = p_response.json()
                     if p_data.get('Sucesso') and p_data.get('Obj'):
-                        found_name = p_data['Obj'][0].get('Nome', '')
+                        person_obj = p_data['Obj'][0]
+                        found_name = person_obj.get('Nome', '')
+                        found_cracha = person_obj.get('Cracha', '')
+                        
                         # Apply this name to all records found, handling potential matricula format mismatches
                         for r in all_records:
                             r_mat = str(r.get('Matricula'))
-                            matricula_names[r_mat] = found_name
+                            employees_info[r_mat] = {'Nome': found_name, 'Cracha': found_cracha}
              except Exception as e:
                 print(f"Error fetching name for matricula {matricula}: {e}")
         else:
             # Bulk fetch all employees
-            matricula_names = fetch_all_employees_map()
+            employees_info = fetch_all_employees_map()
                 
         # Process records for display
         processed_data = []
         for r in all_records:
             mat = r.get('Matricula')
+            str_mat = str(mat)
+            
+            emp_data = employees_info.get(str_mat, {})
+            nome = emp_data.get('Nome', '')
+            display_matricula = emp_data.get('Cracha', mat)
+            
+            relogio_id = r.get('RelogioID')
+            local = get_location_by_clock_id(relogio_id)
+
             processed_data.append({
-                "Matricula": mat,
-                "Nome": matricula_names.get(str(mat), ''),
-                "RelogioID": r.get('RelogioID'),
+                "Matricula": display_matricula,
+                "Nome": nome,
+                "Local": local,
+                "RelogioID": relogio_id,
                 "NumeroSerieRep": r.get('NumeroSerieRep'),
                 "Dia": r.get('Dia'),
                 "Mes": r.get('Mes'),
@@ -336,8 +386,9 @@ def export_excel():
     df = pd.DataFrame(records)
     
     # Select and rename columns if needed, or just dump everything
-    # Based on requirement: "Matricula", "Nome", "RelogioID", "NumeroSerieRep", "DataFormatada", "HoraFormatada"
-    columns_order = ["Matricula", "Nome", "RelogioID", "NumeroSerieRep", "DataFormatada", "HoraFormatada"]
+    # Select and rename columns if needed, or just dump everything
+    # Based on requirement: "Matricula", "Nome", "Local", "RelogioID", "NumeroSerieRep", "DataFormatada", "HoraFormatada"
+    columns_order = ["Matricula", "Nome", "Local", "RelogioID", "NumeroSerieRep", "DataFormatada", "HoraFormatada"]
     # Filter columns that actually exist in the data
     existing_cols = [col for col in columns_order if col in df.columns]
     df = df[existing_cols]
