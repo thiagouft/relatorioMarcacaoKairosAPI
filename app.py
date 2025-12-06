@@ -169,6 +169,47 @@ def delete_user(user_id):
     flash(f'Login {username} excluído com sucesso.', 'success')
     return redirect(url_for('admin_users'))
 
+# --- Helper Functions ---
+
+def fetch_all_employees_map():
+    """
+    Fetches all employees from Kairos API and returns a dictionary {Matricula: Nome}.
+    Iterates through all pages.
+    """
+    employees_map = {}
+    page = 1
+    total_pages = 1
+    
+    try:
+        while page <= total_pages:
+            payload = {
+                "Pagina": page
+            }
+            
+            response = requests.post(
+                app.config['KAIROS_SEARCH_PEOPLE_URL'],
+                json=payload,
+                headers=app.config['KAIROS_HEADERS']
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('Sucesso'):
+                    total_pages = data.get('TotalPagina', 1)
+                    if 'Obj' in data:
+                        for person in data['Obj']:
+                            mat = person.get('Matricula')
+                            nome = person.get('Nome')
+                            if mat:
+                                employees_map[str(mat)] = nome
+            
+            page += 1
+            
+    except Exception as e:
+        print(f"Error fetching all employees: {e}")
+        
+    return employees_map
+
 # --- Kairos API & Reports ---
 
 @app.route('/api/appointments', methods=['POST'])
@@ -230,13 +271,13 @@ def get_appointments():
             total_pages = resp_json.get('TotalPagina', 1)
             page += 1
             
-        # --- Fetch Employee Names (Unique) ---
-        unique_matriculas = list(set(r.get('Matricula') for r in all_records if r.get('Matricula')))
+        # --- Fetch Employee Names ---
         matricula_names = {}
         
-        for mat in unique_matriculas:
-            try:
-                people_payload = {"Matricula": str(mat)}
+        # If searching by specific matricula, fetch just that one
+        if matricula and matricula.strip():
+             try:
+                people_payload = {"Cracha": int(matricula)}
                 p_response = requests.post(
                     app.config['KAIROS_SEARCH_PEOPLE_URL'],
                     json=people_payload,
@@ -245,10 +286,16 @@ def get_appointments():
                 if p_response.status_code == 200:
                     p_data = p_response.json()
                     if p_data.get('Sucesso') and p_data.get('Obj'):
-                        # Assuming the first result is the correct one
-                        matricula_names[mat] = p_data['Obj'][0].get('Nome', '')
-            except Exception as e:
-                print(f"Error fetching name for matricula {mat}: {e}")
+                        found_name = p_data['Obj'][0].get('Nome', '')
+                        # Apply this name to all records found, handling potential matricula format mismatches
+                        for r in all_records:
+                            r_mat = str(r.get('Matricula'))
+                            matricula_names[r_mat] = found_name
+             except Exception as e:
+                print(f"Error fetching name for matricula {matricula}: {e}")
+        else:
+            # Bulk fetch all employees
+            matricula_names = fetch_all_employees_map()
                 
         # Process records for display
         processed_data = []
@@ -256,7 +303,7 @@ def get_appointments():
             mat = r.get('Matricula')
             processed_data.append({
                 "Matricula": mat,
-                "Nome": matricula_names.get(mat, ''),
+                "Nome": matricula_names.get(str(mat), ''),
                 "RelogioID": r.get('RelogioID'),
                 "NumeroSerieRep": r.get('NumeroSerieRep'),
                 "Dia": r.get('Dia'),
