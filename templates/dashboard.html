@@ -45,6 +45,15 @@
                     <input type="date" id="end_date" class="form-control">
                 </div>
                 <div class="filter-group">
+                    <label for="local">Local</label>
+                    <select id="local" class="form-control">
+                        <option value="Todos">Todos</option>
+                        {% for loc in locations %}
+                        <option value="{{ loc }}">{{ loc }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="filter-group">
                     <label for="matricula">Matrícula (Opcional)</label>
                     <input type="text" id="matricula" class="form-control" placeholder="Todas">
                 </div>
@@ -95,6 +104,7 @@
             const startDateInput = document.getElementById('start_date').value;
             const endDateInput = document.getElementById('end_date').value;
             const matriculaInput = document.getElementById('matricula').value;
+            const localInput = document.getElementById('local').value;
             const errorMsg = document.getElementById('error-msg');
             const loading = document.getElementById('loading');
             const resultsCard = document.getElementById('results-card');
@@ -117,7 +127,8 @@
             const payload = {
                 start_date: formatDate(startDateInput),
                 end_date: formatDate(endDateInput),
-                matricula: matriculaInput
+                matricula: matriculaInput,
+                local: localInput
             };
 
             loading.style.display = 'block';

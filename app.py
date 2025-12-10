@@ -128,7 +128,8 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    return render_template('dashboard.html', is_admin=session.get('is_admin'))
+    locations = sorted(CLOCK_GROUPS.keys())
+    return render_template('dashboard.html', is_admin=session.get('is_admin'), locations=locations)
 
 # --- User Management (Admin Only) ---
 
@@ -306,7 +307,8 @@ def get_appointments():
     data = request.json
     start_date = data.get('start_date')
     end_date = data.get('end_date')
-    
+    selected_location = data.get('local') # Get location filter
+
     if not start_date or not end_date:
         return jsonify({'error': 'Datas de início e fim são obrigatórias'}), 400
         
@@ -407,6 +409,11 @@ def get_appointments():
             
             relogio_id = r.get('RelogioID')
             local = get_location_by_clock_id(relogio_id)
+
+            # Apply location filter
+            if selected_location and selected_location.strip() and selected_location != 'Todos':
+                if local != selected_location:
+                    continue
 
             processed_data.append({
                 "Matricula": display_matricula,
