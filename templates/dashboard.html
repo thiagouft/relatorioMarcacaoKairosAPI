@@ -66,7 +66,10 @@
         <div class="card" id="results-card" style="display: none;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <h3>Resultados</h3>
-                <button id="btn-export" class="btn btn-success" style="width: auto;">Exportar Excel</button>
+                <div style="display: flex; gap: 10px;">
+                    <button id="btn-export" class="btn btn-success" style="width: auto;">Exportar Excel</button>
+                    <button id="btn-export-pdf" class="btn btn-danger" style="width: auto;">Exportar PDF</button>
+                </div>
             </div>
 
             <div class="loading" id="loading">Carregando dados...</div>
@@ -189,6 +192,37 @@
             } catch (error) {
                 console.error('Erro:', error);
                 alert('Erro ao exportar arquivo.');
+            }
+        });
+
+        document.getElementById('btn-export-pdf').addEventListener('click', async () => {
+            if (currentData.length === 0) {
+                alert('Sem dados para exportar.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/export-pdf', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ records: currentData })
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'relatorio_ponto.pdf';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                } else {
+                    alert('Erro ao exportar PDF.');
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                alert('Erro ao exportar PDF.');
             }
         });
 

@@ -9,6 +9,10 @@ import datetime
 from functools import wraps
 from config import Config
 from db_setup import User, Log, Base
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import landscape, letter
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -277,14 +281,14 @@ CLOCK_GROUPS = {
   "CANTEIRO III": [4, 7, 10, 17, 18, 22, 24, 25],
   "PIPE MARABA": [5, 9, 20],
   "OFICINA II": [8],
-  "PIPE SAO FELIX": [15, 28],
+  "PIPE SAO FELIX": [15, 28, 29],
   "TREINAMENTO": [16],
   "RH": [13],
   "P12": [6, 12],
-  "PIPE FERROV.": [21, 32],
+  "PIPE FERROV.": [19, 21, 32],
   "TENDA MOTORISTAS III": [26],
   "NAUTICA": [30],
-  "TERRAPLENAGEM IV": [19, 29],
+  "PI SAO FELIX": [35,36],
 }
 
 def get_location_by_clock_id(clock_id):
@@ -472,6 +476,78 @@ def export_excel():
         as_attachment=True,
         download_name='relatorio_ponto.xlsx'
     )
+
+@app.route('/api/export-pdf', methods=['POST'])
+@login_required
+def export_pdf():
+    try:
+        data = request.json
+        records = data.get('records')
+        
+        if not records:
+            return jsonify({'error': 'Sem dados para exportar'}), 400
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter))
+        elements = []
+        styles = getSampleStyleSheet()
+
+        # Title
+        title = Paragraph("Relatório de Ponto", styles['Title'])
+        elements.append(title)
+        elements.append(Spacer(1, 12))
+
+        # Table Data
+        # Header matches Excel export requirement: "Matricula", "Nome", "Local", "RelogioID", "NumeroSerieRep", "DataFormatada", "HoraFormatada"
+        headers = ["Matrícula", "Nome", "Local", "Relógio", "N. Série", "Data", "Hora"]
+        table_data = [headers]
+
+        for r in records:
+            row = [
+                str(r.get('Matricula', '')),
+                str(r.get('Nome', '')),
+                str(r.get('Local', '')),
+                str(r.get('RelogioID', '')),
+                str(r.get('NumeroSerieRep', '')),
+                str(r.get('DataFormatada', '')),
+                str(r.get('HoraFormatada', ''))
+            ]
+            table_data.append(row)
+
+        # Create Table
+        t = Table(table_data)
+        
+        # Style
+        style = TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ])
+        t.setStyle(style)
+        
+        elements.append(t)
+        doc.build(elements)
+        
+        buffer.seek(0)
+        
+        log_action('Exportou relatório para PDF')
+        
+        return send_file(
+            buffer,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name='relatorio_ponto.pdf'
+        )
+
+    except Exception as e:
+        print(f"Erro ao gerar PDF: {e}")
+        return jsonify({'error': 'Erro ao gerar PDF'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
