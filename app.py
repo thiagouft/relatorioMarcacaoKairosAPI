@@ -277,11 +277,11 @@ def fetch_all_employees_map():
 # --- Clock Groups Mapping ---
 CLOCK_GROUPS = {
   "P10": [1, 2, 11, 23],
-  "COCA": [3, 14, 27, 31],
-  "CANTEIRO III": [4, 7, 10, 17, 18, 22, 24, 25],
+  "COCA": [3, 14, 31],
+  "CANTEIRO III": [7, 18, 22, 24, 25],
   "PIPE MARABA": [5, 9, 20],
   "OFICINA II": [8],
-  "PIPE SAO FELIX": [15, 28, 29],
+  "PIPE SAO FELIX": [4, 10, 29, 28],
   "TREINAMENTO": [16],
   "RH": [13],
   "P12": [6, 12],
@@ -289,6 +289,7 @@ CLOCK_GROUPS = {
   "TENDA MOTORISTAS III": [26],
   "NAUTICA": [30],
   "PI SAO FELIX": [35,36],
+  "DOMINGO": [17, 27],
 }
 
 def get_location_by_clock_id(clock_id):
