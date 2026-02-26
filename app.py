@@ -276,12 +276,12 @@ def fetch_all_employees_map():
 
 # --- Clock Groups Mapping ---
 CLOCK_GROUPS = {
-  "P10": [1, 2, 11, 23],
+  "P10": [1, 11, 23,29],
   "COCA": [3, 14, 31],
   "CANTEIRO III": [7, 18, 22, 24, 25],
   "PIPE MARABA": [5, 9, 20],
   "OFICINA II": [8],
-  "PIPE SAO FELIX": [4, 10, 29, 28],
+  "PIPE SAO FELIX": [2, 4, 10, 28],
   "TREINAMENTO": [16],
   "RH": [13],
   "P12": [6, 12],
@@ -318,9 +318,23 @@ def get_appointments():
         return jsonify({'error': 'Datas de início e fim são obrigatórias'}), 400
         
     # Validation
-    d1 = datetime.datetime.strptime(start_date, "%d-%m-%Y")
-    d2 = datetime.datetime.strptime(end_date, "%d-%m-%Y")
-    days_diff = abs((d2 - d1).days)
+    try:
+        # Prevent unconverted data remains by trimming the year part if it's too long
+        sd_parts = start_date.split('-')
+        if len(sd_parts) == 3 and len(sd_parts[2]) > 4:
+             sd_parts[2] = sd_parts[2][:4]
+             start_date = "-".join(sd_parts)
+
+        ed_parts = end_date.split('-')
+        if len(ed_parts) == 3 and len(ed_parts[2]) > 4:
+             ed_parts[2] = ed_parts[2][:4]
+             end_date = "-".join(ed_parts)
+
+        d1 = datetime.datetime.strptime(start_date, "%d-%m-%Y")
+        d2 = datetime.datetime.strptime(end_date, "%d-%m-%Y")
+        days_diff = abs((d2 - d1).days)
+    except ValueError as e:
+        return jsonify({'error': f'Formato de data inválido. Use o calendário.'}), 400
 
     req_matricula = data.get('matricula')
     if req_matricula and req_matricula.strip():

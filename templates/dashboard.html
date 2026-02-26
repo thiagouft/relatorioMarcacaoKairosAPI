@@ -38,11 +38,11 @@
             <div class="filters">
                 <div class="filter-group">
                     <label for="start_date">Data Início</label>
-                    <input type="date" id="start_date" class="form-control">
+                    <input type="date" id="start_date" class="form-control" max="2099-12-31" min="2000-01-01">
                 </div>
                 <div class="filter-group">
                     <label for="end_date">Data Fim</label>
-                    <input type="date" id="end_date" class="form-control">
+                    <input type="date" id="end_date" class="form-control" max="2099-12-31" min="2000-01-01">
                 </div>
                 <div class="filter-group">
                     <label for="local">Local</label>
@@ -123,7 +123,10 @@
 
             // Format dates to DD-MM-YYYY for API
             const formatDate = (dateStr) => {
-                const [y, m, d] = dateStr.split('-');
+                let [y, m, d] = dateStr.split('-');
+                if (y.length > 4) {
+                    y = y.substring(0, 4);
+                }
                 return `${d}-${m}-${y}`;
             };
 
