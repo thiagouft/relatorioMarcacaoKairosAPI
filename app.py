@@ -6,6 +6,7 @@ import requests
 import pandas as pd
 import io
 import datetime
+import json
 from functools import wraps
 from config import Config
 from db_setup import User, Log, Base
@@ -13,7 +14,20 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
+import os
+import werkzeug.utils
 
+# Import utility functions for comando
+from utils_envio_comando import (
+    fetch_cracha,
+    unassociate_clocks,
+    associate_clocks,
+    schedule_commands,
+    fetch_clocks,
+    dismiss_employee,
+    generate_pdf_report,
+    generate_cabecalho_arquivo
+)
 app = Flask(__name__)
 app.config.from_object(Config)
 
@@ -211,6 +225,11 @@ def admin_users():
 @admin_required
 def admin_locais_ponto():
     return render_template('admin_locais_ponto.html')
+
+@app.route('/admin/envio_comando')
+@admin_required
+def envio_comando():
+    return render_template('envio_comando.html')
 
 @app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
 @admin_required
@@ -552,6 +571,300 @@ def api_admin_locais_ponto():
     except Exception as e:
          print(f"Error in api_admin_locais_ponto: {e}")
          return jsonify({'error': str(e)}), 500
+
+# --- Envio de Comandos API ---
+
+@app.route('/api/envio_comando/relogios', methods=['GET'])
+@admin_required
+def api_envio_comando_relogios():
+    relogios = fetch_clocks()
+    return jsonify(relogios)
+
+@app.route('/api/envio_comando/processar', methods=['POST'])
+@admin_required
+def api_envio_comando_processar():
+    try:
+        comandos_str = request.form.get('comandos', '{}')
+        relogios_str = request.form.get('relogios', '[]')
+        matriculas_str = request.form.get('matriculas', '')
+        
+        config_options = json.loads(comandos_str)
+        relogio_list = json.loads(relogios_str)
+        
+        pesquisa_falha = []
+        crachas_sucesso = []
+        falha_file_name = None
+        funcionarios = []
+        
+        if matriculas_str:
+            matriculas_list = json.loads(matriculas_str)
+            funcionarios = [int(m) for m in matriculas_list if str(m).isdigit()]
+        elif 'arquivo' in request.files:
+            file = request.files['arquivo']
+            if file.filename != '':
+                content = file.read().decode('utf-8')
+                linhas = content.split('\n')
+                for linha in linhas:
+                    linha = linha.strip()
+                    if linha and linha.isdigit():
+                        funcionarios.append(int(linha))
+        
+        if not funcionarios:
+            return jsonify({'sucesso': False, 'mensagem': 'Nenhum funcionário fornecido.'})
+            
+        for cracha in funcionarios:
+            result = fetch_cracha(cracha)
+            if not result.get('sucesso'):
+                pesquisa_falha.append(result)
+            else:
+                crachas_sucesso.append(result)
+                if result.get('semTemplates'):
+                    pesquisa_falha.append({
+                        'cracha': result.get('cracha'),
+                        'nome': result.get('nome'),
+                        'sucesso': False,
+                        'mensagem': result.get('mensagem', 'Não possui Biometria'),
+                        'dataDesligamento': result.get('dataDesligamento')
+                    })
+        
+        result_response = {
+            'sucesso': False,
+            'mensagem': 'Nenhum crachá válido encontrado para processamento.',
+            'falhas': pesquisa_falha
+        }
+        
+        if pesquisa_falha:
+            log_file_name = 'falha_consulta.txt'
+            normalized = []
+            for p in pesquisa_falha:
+                normalized.append({
+                    'cracha': p.get('cracha'),
+                    'nome': p.get('nome'),
+                    'sucesso': p.get('sucesso', False),
+                    'mensagem': p.get('mensagem', ''),
+                    'dataDesligamento': p.get('dataDesligamento')
+                })
+            with open(os.path.join(app.root_path, 'static', log_file_name), 'w', encoding='utf-8') as f:
+                json.dump(normalized, f, indent=2, ensure_ascii=False)
+            falha_file_name = log_file_name
+
+        if crachas_sucesso:
+            cracha_list = [c.get('cracha') for c in crachas_sucesso]
+            schedule_result = schedule_commands(cracha_list, config_options, relogio_list)
+            
+            if schedule_result.get('sucesso'):
+                cabecalho = generate_cabecalho_arquivo(relogio_list, config_options)
+                sucesso_file_name = 'sucesso_inclusao.pdf'
+                sucesso_content = [f"Crachá: {c.get('cracha')}, Nome: {c.get('nome')}" for c in crachas_sucesso]
+                generate_pdf_report(os.path.join(app.root_path, 'static', sucesso_file_name), cabecalho, sucesso_content)
+                
+                schedule_result['sucessoFileName'] = sucesso_file_name
+            
+            result_response = schedule_result
+            result_response['falhas'] = pesquisa_falha
+            if falha_file_name:
+                 result_response['falhaFileName'] = falha_file_name
+                 
+        log_action(f"Processado comandos para {len(funcionarios)} funcionarios")
+        return jsonify(result_response)
+
+    except Exception as e:
+        print(f"Erro no processamento: {e}")
+        return jsonify({'sucesso': False, 'mensagem': f'Erro ao processar: {str(e)}'}), 500
+
+@app.route('/api/envio_comando/associar', methods=['POST'])
+@admin_required
+def api_envio_comando_associar():
+    try:
+        relogios_str = request.form.get('relogios', '[]')
+        matriculas_str = request.form.get('matriculas', '')
+        
+        relogio_list = json.loads(relogios_str)
+        if not relogio_list:
+            return jsonify({'sucesso': False, 'mensagem': "Campo 'relogios' é obrigatório."}), 400
+            
+        comandos_list = {
+            'EnviarListaCredenciais': True,
+            'EnviarListaTemplate': True
+        }
+        
+        pesquisa_falha = []
+        crachas_sucesso = []
+        associacao_falha = []
+        falha_file_name = None
+        funcionarios = []
+        
+        if matriculas_str:
+            matriculas_list = json.loads(matriculas_str)
+            funcionarios = [int(m) for m in matriculas_list if str(m).isdigit()]
+        elif 'arquivo' in request.files:
+            file = request.files['arquivo']
+            if file.filename != '':
+                content = file.read().decode('utf-8')
+                linhas = content.split('\n')
+                for linha in linhas:
+                    linha = linha.strip()
+                    if linha and linha.isdigit():
+                        funcionarios.append(int(linha))
+                        
+        for cracha in funcionarios:
+            result = fetch_cracha(cracha)
+            if not result.get('sucesso'):
+                pesquisa_falha.append(result)
+            else:
+                crachas_sucesso.append(result)
+                if result.get('semTemplates'):
+                    pesquisa_falha.append({
+                        'cracha': result.get('cracha'),
+                        'nome': result.get('nome'),
+                        'sucesso': False,
+                        'mensagem': result.get('mensagem', 'Não possui Biometria'),
+                        'dataDesligamento': result.get('dataDesligamento')
+                    })
+                    
+        if not crachas_sucesso:
+            return jsonify({'sucesso': False, 'mensagem': "Nenhum crachá válido encontrado para processamento."})
+            
+        cracha_list = [c.get('cracha') for c in crachas_sucesso]
+        
+        unassociate_clocks(cracha_list, relogio_list)
+        associacao_sucesso = associate_clocks(cracha_list, relogio_list)
+        
+        if not associacao_sucesso.get('sucesso'):
+            associacao_falha.append({'mensagem': associacao_sucesso.get('mensagem')})
+            
+        if pesquisa_falha:
+            log_file_name = 'falha_consulta.txt'
+            normalized = []
+            for p in pesquisa_falha:
+                normalized.append({
+                    'cracha': p.get('cracha'),
+                    'nome': p.get('nome'),
+                    'sucesso': p.get('sucesso', False),
+                    'mensagem': p.get('mensagem', ''),
+                    'dataDesligamento': p.get('dataDesligamento')
+                })
+            with open(os.path.join(app.root_path, 'static', log_file_name), 'w', encoding='utf-8') as f:
+                json.dump(normalized, f, indent=2, ensure_ascii=False)
+            falha_file_name = log_file_name
+            
+        if crachas_sucesso:
+            cabecalho = generate_cabecalho_arquivo(relogio_list, comandos_list)
+            sucesso_content = [f"Crachá: {c.get('cracha')}, Nome: {c.get('nome')}" for c in crachas_sucesso]
+            sucesso_file_name = 'sucesso_associacao.pdf'
+            generate_pdf_report(os.path.join(app.root_path, 'static', sucesso_file_name), cabecalho, sucesso_content)
+        
+        if associacao_falha:
+             with open(os.path.join(app.root_path, 'static', 'falhas_associacao.json'), 'w', encoding='utf-8') as f:
+                json.dump(associacao_falha, f, indent=2, ensure_ascii=False)
+                
+        response_payload = {
+            'sucesso': True,
+            'mensagem': 'Processamento concluído.',
+            'detalhes': {
+                'crachasProcessados': len(cracha_list),
+                'falhasPesquisa': len(pesquisa_falha),
+                'falhasAssociacao': len(associacao_falha)
+            },
+            'sucessoFileName': 'sucesso_associacao.pdf'
+        }
+        
+        if falha_file_name:
+            response_payload['falhaFileName'] = falha_file_name
+            
+        log_action(f"Associados relógios para {len(cracha_list)} funcionários")
+        return jsonify(response_payload)
+        
+    except Exception as e:
+        print(f"Erro ao processar crachás: {e}")
+        return jsonify({'sucesso': False, 'mensagem': f'Erro ao processar: {str(e)}'}), 500
+
+@app.route('/api/envio_comando/desligar', methods=['POST'])
+@admin_required
+def api_envio_comando_desligar():
+    try:
+        if 'arquivo' not in request.files:
+            return jsonify({'sucesso': False, 'mensagem': 'Nenhum arquivo enviado.'}), 400
+            
+        file = request.files['arquivo']
+        if file.filename == '':
+             return jsonify({'sucesso': False, 'mensagem': 'Arquivo inválido.'}), 400
+             
+        content = file.read().decode('utf-8')
+        linhas = [linha.strip() for linha in content.split('\n') if linha.strip()]
+        
+        cracha_list = []
+        for linha in linhas:
+            if len(linha) >= 19:
+                cracha = linha[0:11]
+                dia = linha[11:13]
+                mes = linha[13:15]
+                ano = linha[15:19]
+                data_desligamento = f"{ano}/{mes}/{dia}"
+                cracha_list.append({"Cracha": cracha, "DataDesligamento": data_desligamento})
+                
+        crachas_sucesso = []
+        crachas_falha = []
+        
+        for item in cracha_list:
+            cracha = item["Cracha"]
+            data_desligamento = item["DataDesligamento"]
+            
+            result = fetch_cracha(cracha)
+            if result.get('sucesso'):
+                if result.get('semTemplates'):
+                    crachas_falha.append({
+                        "cracha": result.get('cracha'),
+                        "nome": result.get('nome'),
+                        "mensagem": result.get('mensagem', 'Não possui Biometria')
+                    })
+                
+                dismiss_result = dismiss_employee(result, data_desligamento)
+                if dismiss_result.get('sucesso'):
+                    data_formatada = "/".join(data_desligamento.split("/")[::-1])
+                    crachas_sucesso.append({
+                        "cracha": result.get("cracha"),
+                        "nome": result.get("nome"),
+                        "dataDesligamento": data_formatada
+                    })
+                else:
+                    crachas_falha.append({
+                        "cracha": result.get("cracha"),
+                        "nome": result.get("nome"),
+                        "mensagem": dismiss_result.get("mensagem")
+                    })
+            else:
+                 crachas_falha.append({
+                     "cracha": cracha,
+                     "nome": "Desconhecido",
+                     "mensagem": result.get("mensagem")
+                 })
+                 
+        sucesso_file_name = None
+        falha_file_name = None
+        
+        if crachas_sucesso:
+            sucesso_file_name = 'sucesso_desligamento.pdf'
+            sucesso_content = [f"Crachá: {c.get('cracha')}, Nome: {c.get('nome')}, Data de Desligamento: {c.get('dataDesligamento')}" for c in crachas_sucesso]
+            generate_pdf_report(os.path.join(app.root_path, 'static', sucesso_file_name), "Funcionários Desligados\n\n", sucesso_content)
+            
+        if crachas_falha:
+            falha_file_name = 'falha_desligamento.json'
+            with open(os.path.join(app.root_path, 'static', falha_file_name), 'w', encoding='utf-8') as f:
+                json.dump(crachas_falha, f, indent=2, ensure_ascii=False)
+                
+        log_action(f"Processado desligamento de {len(cracha_list)} funcionários")
+        return jsonify({
+            'sucesso': True,
+            'mensagem': 'Processamento de desligamento concluído.',
+            'processados': len(cracha_list),
+            'sucessoFileName': sucesso_file_name,
+            'falhaFileName': falha_file_name
+        })
+        
+    except Exception as e:
+        print(f"Erro ao processar desligamento: {e}")
+        return jsonify({'sucesso': False, 'mensagem': f'Erro ao processar: {str(e)}'}), 500
 
 @app.route('/api/export', methods=['POST'])
 @login_required

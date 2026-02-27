@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Envio de Comando - Kairos Relatórios</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/envio_comando.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Roboto:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <a href="{{ url_for('dashboard') }}" class="navbar-brand">Kairos Relatórios</a>
+            <div class="nav-links">
+                <span>Olá, <span style="text-transform: capitalize;">{{ session['username'] }}</span></span>
+                <a href="{{ url_for('admin_users') }}">Administração</a>
+                <a href="{{ url_for('admin_locais_ponto') }}">Locais de Ponto</a>
+                <a href="{{ url_for('envio_comando') }}" class="active">Envio de Comando</a>
+                <a href="{{ url_for('logout') }}">Sair</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container" style="flex-direction: column; gap: 1rem;">
+        <div class="header">
+            <h1>Processador de Comandos Dimep Kairos</h1>
+        </div>
+
+        <div class="command-dashboard">
+            <!-- Painel esquerdo: Comandos -->
+            <div class="panel left-panel">
+                <h2>Comandos</h2>
+                <form id="uploadForm">
+                    <div class="form-group">
+                        <label for="arquivo">Escolha o arquivo:</label>
+                        <input type="file" id="arquivo" name="arquivo" accept=".txt" />
+                    </div>
+                    <div class="form-group">
+                        <label for="matriculas">Ou digite as matrículas (separadas por vírgula):</label>
+                        <textarea id="matriculas" name="matriculas" placeholder="Ex: 12345,67890,11223"
+                            rows="3"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Selecione os comandos:</label>
+                        <div class="checkbox-group">
+                            <h4>Comando de envio de funcionários</h4>
+                            <label>
+                                <input type="checkbox" name="comandos" value="EnviarListaCredenciais" />
+                                Enviar Lista de Funcionários / Credenciais
+                            </label>
+                            <label>
+                                <input type="checkbox" name="comandos" value="EnviarListaTemplate" />
+                                Enviar Lista de Templates
+                            </label>
+                            <h4>Comando de exclusão de funcionários</h4>
+                            <label>
+                                <input type="checkbox" name="comandos" value="ExcluirListaCredenciais" />
+                                Excluir Lista de Credenciais
+                            </label>
+                            <label>
+                                <input type="checkbox" name="comandos" value="ExcluirListaPessoas" />
+                                Excluir Lista de Pessoas
+                            </label>
+                            <label>
+                                <input type="checkbox" name="comandos" value="ExcluirListaTemplates" />
+                                Excluir Lista de Templates
+                            </label>
+                            <h4>Comando de coleta de biometria</h4>
+                            <label>
+                                <input type="checkbox" name="comandos" value="BuscarListaTemplatesRelogioPessoa" />
+                                Buscar Templates (Parcial)
+                            </label>
+                            <label>
+                                <input type="checkbox" name="comandos" value="BuscarListaTemplatesRelogioPessoaTotal" />
+                                Buscar Templates (Total)
+                            </label>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="margin-top: 1rem;">Envio ao relógio</button>
+                </form>
+                <button id="associarRelogios" class="btn btn-success" style="margin-top: 1rem">
+                    Associar ao relógio
+                </button>
+
+                <!-- Barra de progresso -->
+                <div id="progressBar" style="display: none; margin-top: 1rem;">
+                    <div class="progress-bar-fill">0%</div>
+                </div>
+
+                <!-- Resultado -->
+                <div id="result" style="display: none; margin-top: 1rem;" class="card"></div>
+            </div>
+
+            <!-- Painel direito: Relógios -->
+            <div class="panel right-panel">
+                <h2>Selecione os Relógios</h2>
+                <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem">
+                    <button id="selectAllRelogios" class="btn btn-primary btn-sm">Selecionar Todos</button>
+                    <button id="deselectAllRelogios" class="btn btn-danger btn-sm">Deselecionar Todos</button>
+                </div>
+                <div id="relogios" class="checkbox-group">
+                    <!-- Relógios serão carregados aqui via JavaScript -->
+                </div>
+            </div>
+
+            <!-- Painel de Desligamento de Funcionários -->
+            <div class="panel">
+                <h2>Desligamento de Funcionário</h2>
+                <form id="desligamentoForm">
+                    <div class="form-group">
+                        <label for="arquivoDesligamento">Escolha o arquivo:</label>
+                        <input type="file" id="arquivoDesligamento" name="arquivo" accept=".txt" required />
+                    </div>
+                    <button type="submit" class="btn btn-danger" style="margin-top: 1rem;">Desligar</button>
+                </form>
+
+                <!-- Barra de progresso -->
+                <div id="progressBarDesligamento" style="display: none; margin-top: 1rem;">
+                    <div class="progress-bar-fill">0%</div>
+                </div>
+
+                <!-- Resultado -->
+                <div id="resultDesligamento" style="display: none; margin-top: 1rem;" class="card"></div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <img src="{{ url_for('static', filename='images/mixestec_logo.png') }}" alt="Mixestec Logo"
+                class="footer-logo">
+            <p>Desenvolvido por Thiago Silva Pereira</p>
+        </div>
+    </footer>
+
+    <!-- Pass grouping definition to frontend via global window variable -->
+    <script>
+        window.gruposRelogios = {
+            "P10": [1, 11, 23, 29],
+            "COCA": [3, 14, 31],
+            "CANTEIRO III": [7, 18, 22, 24, 25],
+            "PIPE MARABA": [5, 9, 20],
+            "OFICINA II": [8],
+            "PIPE SAO FELIX": [2, 4, 10, 28],
+            "TREINAMENTO": [16],
+            "RH": [13],
+            "P12": [6, 12],
+            "PIPE FERROV.": [19, 21, 32],
+            "TENDA MOTORISTAS III": [26],
+            "NAUTICA": [30],
+            "PI SAO FELIX": [33, 34, 35, 36],
+            "DOMINGO": [17, 27],
+        };
+    </script>
+    <script src="{{ url_for('static', filename='js/envio_comando.js') }}"></script>
+</body>
+
+</html>

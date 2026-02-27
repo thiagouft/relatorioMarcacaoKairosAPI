@@ -19,3 +19,11 @@ env/
 *.xlsx
 *.log
 instance/
+
+# Relatórios e arquivos gerados pelo Envio de Comando
+static/falha_consulta.txt
+static/sucesso_inclusao.pdf
+static/sucesso_associacao.pdf
+static/falhas_associacao.json
+static/sucesso_desligamento.pdf
+static/falha_desligamento.json

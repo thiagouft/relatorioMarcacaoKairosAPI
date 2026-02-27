@@ -18,6 +18,7 @@
                 {% if is_admin %}
                 <a href="{{ url_for('admin_users') }}">Administração</a>
                 <a href="{{ url_for('admin_locais_ponto') }}">Locais de Ponto</a>
+                <a href="{{ url_for('envio_comando') }}">Envio de Comando</a>
                 {% endif %}
                 <a href="{{ url_for('logout') }}">Sair</a>
             </div>

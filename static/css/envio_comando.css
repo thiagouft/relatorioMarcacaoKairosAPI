@@ -1,0 +1,204 @@
+.command-dashboard {
+  display: flex;
+  flex: 1;
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+@media (max-width: 768px) {
+  .command-dashboard {
+      flex-direction: column;
+  }
+}
+
+.panel {
+  flex: 1;
+  background-color: white;
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+}
+
+.panel h2 {
+  font-family: "Inter", sans-serif;
+  text-align: center;
+  margin-bottom: 1.5rem;
+  color: #1a202c;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #4a5568;
+}
+
+input[type="file"] {
+  margin-bottom: 1rem;
+  width: 100%;
+}
+
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 2px solid #5a67d8;
+  border-radius: 4px;
+  background-color: transparent;
+  cursor: pointer;
+  display: inline-block;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+input[type="checkbox"]:checked {
+  background-color: #5a67d8;
+  border-color: #5a67d8;
+}
+
+input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 8px;
+  height: 8px;
+  background-color: white;
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+input[type="checkbox"]:checked::after {
+  opacity: 1;
+}
+
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.checkbox-group h4 {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  color: #2d3748;
+}
+
+.checkbox-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background-color: #f7fafc;
+  padding: 0.5rem;
+  border-radius: 6px;
+  transition: background-color 0.3s ease;
+  cursor: pointer;
+  margin: 0;
+  border: 1px solid transparent;
+}
+
+.checkbox-group label:hover {
+  background-color: #edf2f7;
+  border-color: #e2e8f0;
+}
+
+.grupos-relogios {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.grupos-relogios label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+#progressBar, #progressBarDesligamento {
+  width: 100%;
+  background-color: #e2e8f0;
+  border-radius: 5px;
+  overflow: hidden;
+  margin-top: 10px;
+  height: 20px;
+  position: relative;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background-color: #48bb78;
+  width: 100%; /* animated via HTML text/CSS if needed, but primarily used for visual feedback */
+  text-align: center;
+  line-height: 20px;
+  color: white;
+  font-size: 0.8rem;
+  transition: width 0.3s ease;
+}
+
+#result p, #resultDesligamento p {
+    margin: 0.5rem 0;
+}
+
+.success {
+  color: #38a169;
+  font-weight: 500;
+}
+
+.error {
+  color: #e53e3e;
+  font-weight: 500;
+}
+
+.download-section {
+  margin-top: 20px;
+  padding-top: 1rem;
+  border-top: 1px solid #e2e8f0;
+}
+
+.download-section a {
+  display: block;
+  background-color: #5a67d8;
+  color: white;
+  padding: 10px;
+  text-align: center;
+  text-decoration: none;
+  font-weight: 500;
+  border-radius: 5px;
+  margin-top: 10px;
+  transition: background-color 0.3s ease;
+}
+
+.download-section a:hover {
+  background-color: #434ce6;
+}
+
+#matriculas {
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+  border: 1px solid #cbd5e0;
+  border-radius: 5px;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: "Inter", sans-serif;
+}
+#matriculas:focus {
+    outline: none;
+    border-color: #5a67d8;
+    box-shadow: 0 0 0 3px rgba(90, 103, 216, 0.2);
+}
