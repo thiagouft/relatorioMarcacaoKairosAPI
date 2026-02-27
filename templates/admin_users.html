@@ -14,7 +14,10 @@
         <div class="container">
             <a href="{{ url_for('dashboard') }}" class="navbar-brand">Kairos Relatórios</a>
             <div class="nav-links">
-                <a href="{{ url_for('dashboard') }}">Voltar ao Dashboard</a>
+                <a href="{{ url_for('dashboard') }}">Dashboard</a>
+                <a href="{{ url_for('admin_users') }}"
+                    style="font-weight: bold; border-bottom: 2px solid var(--accent-color);">Usuários</a>
+                <a href="{{ url_for('admin_locais_ponto') }}">Locais de Ponto</a>
                 <a href="{{ url_for('logout') }}">Sair</a>
             </div>
         </div>

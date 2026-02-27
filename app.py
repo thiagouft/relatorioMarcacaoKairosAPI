@@ -207,6 +207,11 @@ def admin_users():
     db.close()
     return render_template('admin_users.html', users=users)
 
+@app.route('/admin/locais_ponto')
+@admin_required
+def admin_locais_ponto():
+    return render_template('admin_locais_ponto.html')
+
 @app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
 @admin_required
 def delete_user(user_id):
@@ -457,6 +462,96 @@ def get_appointments():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/locais_ponto', methods=['POST'])
+@admin_required
+def api_admin_locais_ponto():
+    data = request.json
+    start_date = data.get('start_date')
+    end_date = data.get('end_date')
+    matriculas = data.get('matriculas', [])
+
+    if not start_date or not end_date or not matriculas:
+        return jsonify({'error': 'Datas e lista de matrículas são obrigatórias'}), 400
+        
+    try:
+        sd_parts = start_date.split('-')
+        if len(sd_parts) == 3 and len(sd_parts[2]) > 4:
+             sd_parts[2] = sd_parts[2][:4]
+             start_date = "-".join(sd_parts)
+
+        ed_parts = end_date.split('-')
+        if len(ed_parts) == 3 and len(ed_parts[2]) > 4:
+             ed_parts[2] = ed_parts[2][:4]
+             end_date = "-".join(ed_parts)
+
+        datetime.datetime.strptime(start_date, "%d-%m-%Y")
+        datetime.datetime.strptime(end_date, "%d-%m-%Y")
+    except ValueError:
+        return jsonify({'error': 'Formato de data inválido'}), 400
+
+    grupo_crachas = {grupo: set() for grupo in CLOCK_GROUPS}
+    crachas_sem_dados = []
+    crachas_inexistentes = []
+
+    try:
+        for cracha in matriculas:
+            payload = {
+                "CrachasPessoa": [cracha],
+                "DataInicio": start_date,
+                "DataFim": end_date,
+                "CalculoNaoAtualizado": "true",
+                "ResponseType": "AS400V1"
+            }
+            
+            response = requests.post(
+                app.config['KAIROS_API_URL'],
+                json=payload,
+                headers=app.config['KAIROS_HEADERS']
+            )
+            
+            if response.status_code == 200:
+                resp_json = response.json()
+                sucesso = resp_json.get("Sucesso")
+                obj_list = resp_json.get("Obj")
+                
+                if sucesso and isinstance(obj_list, list) and len(obj_list) > 0:
+                    relogio_ids = set()
+                    for item in obj_list:
+                        relogio_id = item.get("RelogioID")
+                        if relogio_id is not None:
+                            relogio_ids.add(relogio_id)
+                            
+                    for grupo, ids_grupo in CLOCK_GROUPS.items():
+                        if any(relogio_id in ids_grupo for relogio_id in relogio_ids):
+                            grupo_crachas[grupo].add(cracha)
+                            
+                elif sucesso and isinstance(obj_list, list) and len(obj_list) == 0:
+                    crachas_sem_dados.append(cracha)
+                elif not sucesso and obj_list is None:
+                    crachas_inexistentes.append(cracha)
+            else:
+                print(f"Erro ao consultar api/admin/locais_ponto crachá {cracha}: {response.status_code}")
+                # We log it but continue processing the rest
+                
+        # Convert sets to sorted lists for JSON serialization
+        grupo_crachas_serializable = {
+            k: sorted(list(v)) for k, v in grupo_crachas.items() if v
+        }
+        
+        log_action(f'Consultou Locais de Ponto para {len(matriculas)} matrículas ({start_date} a {end_date})')
+        
+        return jsonify({
+            'data': {
+                'grupo_crachas': grupo_crachas_serializable,
+                'crachas_sem_dados': sorted(crachas_sem_dados),
+                'crachas_inexistentes': sorted(crachas_inexistentes)
+            }
+        })
+        
+    except Exception as e:
+         print(f"Error in api_admin_locais_ponto: {e}")
+         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/export', methods=['POST'])
 @login_required

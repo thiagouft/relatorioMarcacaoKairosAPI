@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Locais de Ponto (Admin) - Kairos Relatórios</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        .file-upload-wrapper {
+            margin-bottom: 20px;
+        }
+
+        .result-group {
+            margin-bottom: 30px;
+            padding: 15px;
+            background-color: var(--secondary-color);
+            border-radius: var(--border-radius);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .result-group h4 {
+            margin-top: 0;
+            color: var(--primary-color);
+            border-bottom: 2px solid var(--accent-color);
+            padding-bottom: 5px;
+            margin-bottom: 15px;
+        }
+
+        .result-group.danger h4 {
+            color: #dc3545;
+            border-bottom-color: #dc3545;
+        }
+
+        .result-group.warning h4 {
+            color: #ffc107;
+            border-bottom-color: #ffc107;
+        }
+
+        .cracha-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .cracha-item {
+            background-color: white;
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 0.9em;
+            font-weight: 600;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .cracha-item.danger {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .cracha-item.warning {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <a href="{{ url_for('dashboard') }}" class="navbar-brand">Kairos Relatórios</a>
+            <div class="nav-links">
+                <span>Olá, <span style="text-transform: capitalize;">{{ session['username'] }}</span></span>
+                <a href="{{ url_for('dashboard') }}">Dashboard</a>
+                <a href="{{ url_for('admin_users') }}">Usuários</a>
+                <a href="{{ url_for('admin_locais_ponto') }}"
+                    style="font-weight: bold; border-bottom: 2px solid var(--accent-color);">Locais de Ponto</a>
+                <a href="{{ url_for('logout') }}">Sair</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="card">
+            <h3>Buscar Locais de Ponto (por Arquivo .txt)</h3>
+            <p style="margin-bottom: 20px; color: #666; font-size: 0.9em;">
+                Faça o upload de um arquivo de texto (.txt) contendo uma matrícula por linha. O sistema irá buscar em
+                quais relógios cada matrícula registrou ponto no período selecionado.
+            </p>
+
+            <div class="filters">
+                <div class="filter-group">
+                    <label for="start_date">Data Início</label>
+                    <input type="date" id="start_date" class="form-control" max="2099-12-31" min="2000-01-01">
+                </div>
+                <div class="filter-group">
+                    <label for="end_date">Data Fim</label>
+                    <input type="date" id="end_date" class="form-control" max="2099-12-31" min="2000-01-01">
+                </div>
+
+                <div class="filter-group" style="flex: 2;">
+                    <label for="file_matriculas">Arquivo de Matrículas (.txt)</label>
+                    <input type="file" id="file_matriculas" class="form-control" accept=".txt">
+                </div>
+
+                <div class="filter-group" style="display: flex; align-items: flex-end;">
+                    <button id="btn-processar" class="btn btn-primary" style="width: auto; height: 42px;">Processar
+                        Lista</button>
+                </div>
+            </div>
+
+            <div id="file-error-msg" class="alert alert-danger" style="display: none; margin-top: 15px;"></div>
+        </div>
+
+        <div class="card" id="results-card" style="display: none;">
+            <h3>Resultados do Processamento</h3>
+            <div class="loading" id="loading">Consultando API Kairos... Por favor, aguarde.</div>
+
+            <div id="results-container" style="display: none; margin-top: 20px;">
+                <!-- JS will populate the results here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('btn-processar').addEventListener('click', async () => {
+            const startDateInput = document.getElementById('start_date').value;
+            const endDateInput = document.getElementById('end_date').value;
+            const fileInput = document.getElementById('file_matriculas');
+            const errorMsg = document.getElementById('file-error-msg');
+
+            const resultsCard = document.getElementById('results-card');
+            const loading = document.getElementById('loading');
+            const resultsContainer = document.getElementById('results-container');
+
+            errorMsg.style.display = 'none';
+
+            if (!startDateInput || !endDateInput) {
+                errorMsg.textContent = 'Por favor, selecione as datas de início e fim.';
+                errorMsg.style.display = 'block';
+                return;
+            }
+
+            if (!fileInput.files || fileInput.files.length === 0) {
+                errorMsg.textContent = 'Por favor, selecione um arquivo .txt.';
+                errorMsg.style.display = 'block';
+                return;
+            }
+
+            const file = fileInput.files[0];
+            if (file.type !== "text/plain") {
+                errorMsg.textContent = 'Por favor, selecione um arquivo de texto válido (.txt).';
+                errorMsg.style.display = 'block';
+                return;
+            }
+
+            // Read the file content
+            const reader = new FileReader();
+
+            reader.onload = async function (e) {
+                const text = e.target.result;
+                const lines = text.split(/\r?\n/);
+                const matriculas = [];
+
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (line) {
+                        // Check if it's purely digits
+                        if (!/^\d+$/.test(line)) {
+                            errorMsg.textContent = `A linha ${i + 1} ("${line}") contém caracteres inválidos. O arquivo deve ter apenas números (matrículas).`;
+                            errorMsg.style.display = 'block';
+                            return;
+                        }
+                        matriculas.push(parseInt(line, 10));
+                    }
+                }
+
+                if (matriculas.length === 0) {
+                    errorMsg.textContent = 'O arquivo selecionado está vazio ou não possui matrículas válidas.';
+                    errorMsg.style.display = 'block';
+                    return;
+                }
+
+                // Format dates to DD-MM-YYYY for API
+                const formatDate = (dateStr) => {
+                    let [y, m, d] = dateStr.split('-');
+                    if (y.length > 4) {
+                        y = y.substring(0, 4);
+                    }
+                    return `${d}-${m}-${y}`;
+                };
+
+                const payload = {
+                    start_date: formatDate(startDateInput),
+                    end_date: formatDate(endDateInput),
+                    matriculas: matriculas
+                };
+
+                // Show loading
+                resultsCard.style.display = 'block';
+                loading.style.display = 'block';
+                resultsContainer.style.display = 'none';
+                resultsContainer.innerHTML = '';
+
+                try {
+                    const response = await fetch('/api/admin/locais_ponto', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(result.error || 'Erro na requisição ao processar a lista.');
+                    }
+
+                    renderResults(result.data);
+
+                } catch (error) {
+                    errorMsg.textContent = error.message;
+                    errorMsg.style.display = 'block';
+                    resultsCard.style.display = 'none';
+                } finally {
+                    loading.style.display = 'none';
+                }
+            };
+
+            reader.readAsText(file);
+        });
+
+        function renderResults(data) {
+            const container = document.getElementById('results-container');
+            container.innerHTML = '';
+
+            // 1. Locais com crachás (Grupos normais)
+            if (data.grupo_crachas && Object.keys(data.grupo_crachas).length > 0) {
+                for (const [grupo, crachas] of Object.entries(data.grupo_crachas)) {
+                    if (crachas && crachas.length > 0) {
+                        const groupDiv = document.createElement('div');
+                        groupDiv.className = 'result-group';
+
+                        const title = document.createElement('h4');
+                        title.textContent = `${grupo} (${crachas.length})`;
+                        groupDiv.appendChild(title);
+
+                        const listDiv = document.createElement('div');
+                        listDiv.className = 'cracha-list';
+
+                        crachas.forEach(c => {
+                            const item = document.createElement('span');
+                            item.className = 'cracha-item';
+                            item.textContent = c;
+                            listDiv.appendChild(item);
+                        });
+
+                        groupDiv.appendChild(listDiv);
+                        container.appendChild(groupDiv);
+                    }
+                }
+            }
+
+            // 2. Sem Marcação (Warning)
+            if (data.crachas_sem_dados && data.crachas_sem_dados.length > 0) {
+                const semDadosDiv = document.createElement('div');
+                semDadosDiv.className = 'result-group warning';
+
+                const title = document.createElement('h4');
+                title.textContent = `Sem Marcação no Período (${data.crachas_sem_dados.length})`;
+                semDadosDiv.appendChild(title);
+
+                const listDiv = document.createElement('div');
+                listDiv.className = 'cracha-list';
+
+                data.crachas_sem_dados.forEach(c => {
+                    const item = document.createElement('span');
+                    item.className = 'cracha-item warning';
+                    item.textContent = c;
+                    listDiv.appendChild(item);
+                });
+
+                semDadosDiv.appendChild(listDiv);
+                container.appendChild(semDadosDiv);
+            }
+
+            // 3. Inexistentes (Danger)
+            if (data.crachas_inexistentes && data.crachas_inexistentes.length > 0) {
+                const inextDiv = document.createElement('div');
+                inextDiv.className = 'result-group danger';
+
+                const title = document.createElement('h4');
+                title.textContent = `Matrículas Inexistentes na Base (${data.crachas_inexistentes.length})`;
+                inextDiv.appendChild(title);
+
+                const listDiv = document.createElement('div');
+                listDiv.className = 'cracha-list';
+
+                data.crachas_inexistentes.forEach(c => {
+                    const item = document.createElement('span');
+                    item.className = 'cracha-item danger';
+                    item.textContent = c;
+                    listDiv.appendChild(item);
+                });
+
+                inextDiv.appendChild(listDiv);
+                container.appendChild(inextDiv);
+            }
+
+            if (container.innerHTML === "") {
+                container.innerHTML = "<p>Nenhum resultado processado.</p>";
+            }
+
+            container.style.display = 'block';
+        }
+    </script>
+</body>
+
+</html>
