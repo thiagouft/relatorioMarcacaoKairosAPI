@@ -15,7 +15,7 @@
 <body>
     <nav class="navbar">
         <div class="container">
-            <a href="{{ url_for('dashboard') }}" class="navbar-brand">Kairos Relatórios</a>
+            <a href="{{ url_for('home') }}" class="navbar-brand">Kairos Relatórios</a>
             <div class="nav-links">
                 <span>Olá, <span style="text-transform: capitalize;">{{ session['username'] }}</span></span>
                 <a href="{{ url_for('admin_users') }}">Administração</a>
@@ -36,7 +36,7 @@
 
     <div class="container" style="flex-direction: column; gap: 1rem;">
 
-        <div class="command-dashboard">
+        <div class="command-home">
             <!-- Painel esquerdo: Comandos -->
             <div class="panel left-panel" id="panel-envio-comandos">
                 <h2>Comandos</h2>

@@ -68,10 +68,10 @@
 <body>
     <nav class="navbar">
         <div class="container">
-            <a href="{{ url_for('dashboard') }}" class="navbar-brand">Kairos Relatórios</a>
+            <a href="{{ url_for('home') }}" class="navbar-brand">Kairos Relatórios</a>
             <div class="nav-links">
                 <span>Olá, <span style="text-transform: capitalize;">{{ session['username'] }}</span></span>
-                <a href="{{ url_for('dashboard') }}">Dashboard</a>
+                <a href="{{ url_for('home') }}">Home</a>
                 {% if is_admin %}
                 <a href="{{ url_for('admin_users') }}">Administração</a>
                 <a href="{{ url_for('admin_locais_ponto') }}" class="active"

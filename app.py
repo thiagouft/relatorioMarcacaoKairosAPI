@@ -52,7 +52,7 @@ def admin_required(f):
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session or not session.get('is_admin'):
             flash('Acesso negado. Requer privilégios de administrador.', 'danger')
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('home'))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -72,7 +72,7 @@ def log_action(action):
 @app.route('/')
 def index():
     if 'user_id' in session:
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('home'))
     return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -97,7 +97,7 @@ def login():
             if user.must_change_password:
                 return redirect(url_for('change_password'))
                 
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('home'))
         else:
             flash('Email ou senha inválidos', 'danger')
             
@@ -125,7 +125,7 @@ def change_password():
             session['must_change_password'] = False
             flash('Senha alterada com sucesso.', 'success')
             db.close()
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('home'))
         
         db.close()
         
@@ -143,11 +143,11 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-@app.route('/dashboard')
+@app.route('/home')
 @login_required
-def dashboard():
+def home():
     locations = sorted(CLOCK_GROUPS.keys())
-    return render_template('dashboard.html', is_admin=session.get('is_admin'), locations=locations)
+    return render_template('home.html', is_admin=session.get('is_admin'), locations=locations)
 
 # --- User Management (Admin Only) ---
 
@@ -203,7 +203,7 @@ def reset_password():
     if not user:
         flash('Login não encontrado.', 'danger')
         db.close()
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('home'))
     
     user.password_hash = generate_password_hash(new_password)
     db.commit()
