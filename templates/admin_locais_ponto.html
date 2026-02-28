@@ -72,9 +72,18 @@
             <div class="nav-links">
                 <span>Olá, <span style="text-transform: capitalize;">{{ session['username'] }}</span></span>
                 <a href="{{ url_for('dashboard') }}">Dashboard</a>
-                <a href="{{ url_for('admin_users') }}">Usuários</a>
-                <a href="{{ url_for('admin_locais_ponto') }}"
+                {% if is_admin %}
+                <a href="{{ url_for('admin_users') }}">Administração</a>
+                <a href="{{ url_for('admin_locais_ponto') }}" class="active"
                     style="font-weight: bold; border-bottom: 2px solid var(--accent-color);">Locais de Ponto</a>
+                <div class="dropdown">
+                    <button class="dropbtn">Comandos do Relógio ▼</button>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('envio_comando') }}#envio">Envio de comando</a>
+                        <a href="{{ url_for('envio_comando') }}#desligamento">Envio de Desligamento</a>
+                    </div>
+                </div>
+                {% endif %}
                 <a href="{{ url_for('logout') }}">Sair</a>
             </div>
         </div>
