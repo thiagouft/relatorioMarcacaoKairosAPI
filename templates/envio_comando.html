@@ -20,20 +20,25 @@
                 <span>Olá, <span style="text-transform: capitalize;">{{ session['username'] }}</span></span>
                 <a href="{{ url_for('admin_users') }}">Administração</a>
                 <a href="{{ url_for('admin_locais_ponto') }}">Locais de Ponto</a>
-                <a href="{{ url_for('envio_comando') }}" class="active">Envio de Comando</a>
+                <div class="dropdown">
+                    <button class="dropbtn"
+                        style="font-weight: bold; border-bottom: 2px solid var(--accent-color);">Comandos do Relógio
+                        ▼</button>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('envio_comando') }}#envio">Envio de comando</a>
+                        <a href="{{ url_for('envio_comando') }}#desligamento">Envio de Desligamento</a>
+                    </div>
+                </div>
                 <a href="{{ url_for('logout') }}">Sair</a>
             </div>
         </div>
     </nav>
 
     <div class="container" style="flex-direction: column; gap: 1rem;">
-        <div class="header">
-            <h1>Processador de Comandos Dimep Kairos</h1>
-        </div>
 
         <div class="command-dashboard">
             <!-- Painel esquerdo: Comandos -->
-            <div class="panel left-panel">
+            <div class="panel left-panel" id="panel-envio-comandos">
                 <h2>Comandos</h2>
                 <form id="uploadForm">
                     <div class="form-group">
@@ -97,11 +102,11 @@
             </div>
 
             <!-- Painel direito: Relógios -->
-            <div class="panel right-panel">
+            <div class="panel right-panel" id="panel-envio-relogios">
                 <h2>Selecione os Relógios</h2>
-                <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem">
-                    <button id="selectAllRelogios" class="btn btn-primary btn-sm">Selecionar Todos</button>
-                    <button id="deselectAllRelogios" class="btn btn-danger btn-sm">Deselecionar Todos</button>
+                <div class="selection-buttons-container">
+                    <button id="selectAllRelogios" class="btn btn-primary btn-select-all">Selecionar Todos</button>
+                    <button id="deselectAllRelogios" class="btn btn-deselect-all">Deselecionar<br>Todos</button>
                 </div>
                 <div id="relogios" class="checkbox-group">
                     <!-- Relógios serão carregados aqui via JavaScript -->
@@ -109,7 +114,7 @@
             </div>
 
             <!-- Painel de Desligamento de Funcionários -->
-            <div class="panel">
+            <div class="panel" id="panel-desligamento" style="display: none;">
                 <h2>Desligamento de Funcionário</h2>
                 <form id="desligamentoForm">
                     <div class="form-group">
