@@ -91,9 +91,9 @@
 
     <div class="container">
         <div class="card">
-            <h3>Buscar Locais de Ponto (por Arquivo .txt)</h3>
+            <h3>Buscar Locais de Ponto</h3>
             <p style="margin-bottom: 20px; color: #666; font-size: 0.9em;">
-                Faça o upload de um arquivo de texto (.txt) contendo uma matrícula por linha. O sistema irá buscar em
+                Informe as matrículas manualmente separadas por vírgula OU faça o upload de um arquivo de texto (.txt) contendo uma matrícula por linha. O sistema irá buscar em
                 quais relógios cada matrícula registrou ponto no período selecionado.
             </p>
 
@@ -108,7 +108,12 @@
                 </div>
 
                 <div class="filter-group" style="flex: 2;">
-                    <label for="file_matriculas">Arquivo de Matrículas (.txt)</label>
+                    <label for="manual_matriculas">Matrículas Manuais</label>
+                    <input type="text" id="manual_matriculas" class="form-control" placeholder="Ex: 30019002083, 30019001181">
+                </div>
+
+                <div class="filter-group" style="flex: 2;">
+                    <label for="file_matriculas">Ou Arquivo (.txt)</label>
                     <input type="file" id="file_matriculas" class="form-control" accept=".txt">
                 </div>
 
@@ -136,6 +141,7 @@
             const startDateInput = document.getElementById('start_date').value;
             const endDateInput = document.getElementById('end_date').value;
             const fileInput = document.getElementById('file_matriculas');
+            const manualInput = document.getElementById('manual_matriculas').value;
             const errorMsg = document.getElementById('file-error-msg');
 
             const resultsCard = document.getElementById('results-card');
@@ -150,45 +156,46 @@
                 return;
             }
 
-            if (!fileInput.files || fileInput.files.length === 0) {
-                errorMsg.textContent = 'Por favor, selecione um arquivo .txt.';
+            const hasFile = fileInput.files && fileInput.files.length > 0;
+            const hasManual = manualInput.trim() !== '';
+
+            if (!hasFile && !hasManual) {
+                errorMsg.textContent = 'Por favor, informe matrículas manualmente ou selecione um arquivo .txt.';
                 errorMsg.style.display = 'block';
                 return;
             }
 
-            const file = fileInput.files[0];
-            if (file.type !== "text/plain") {
+            if (hasFile && fileInput.files[0].type !== "text/plain") {
                 errorMsg.textContent = 'Por favor, selecione um arquivo de texto válido (.txt).';
                 errorMsg.style.display = 'block';
                 return;
             }
 
-            // Read the file content
-            const reader = new FileReader();
+            let todasMatriculas = [];
 
-            reader.onload = async function (e) {
-                const text = e.target.result;
-                const lines = text.split(/\r?\n/);
-                const matriculas = [];
-
-                for (let i = 0; i < lines.length; i++) {
-                    const line = lines[i].trim();
+            if (hasManual) {
+                const manualList = manualInput.split(',');
+                for (let i = 0; i < manualList.length; i++) {
+                    const line = manualList[i].trim();
                     if (line) {
-                        // Check if it's purely digits
                         if (!/^\d+$/.test(line)) {
-                            errorMsg.textContent = `A linha ${i + 1} ("${line}") contém caracteres inválidos. O arquivo deve ter apenas números (matrículas).`;
+                            errorMsg.textContent = `A matrícula "${line}" digitada manualmente é inválida. Digite apenas números.`;
                             errorMsg.style.display = 'block';
                             return;
                         }
-                        matriculas.push(parseInt(line, 10));
+                        todasMatriculas.push(parseInt(line, 10));
                     }
                 }
+            }
 
-                if (matriculas.length === 0) {
-                    errorMsg.textContent = 'O arquivo selecionado está vazio ou não possui matrículas válidas.';
+            const processarAPI = async (matriculasFinais) => {
+                if (matriculasFinais.length === 0) {
+                    errorMsg.textContent = 'Nenhuma matrícula válida identificada.';
                     errorMsg.style.display = 'block';
                     return;
                 }
+
+                matriculasFinais = [...new Set(matriculasFinais)]; // Remove duplicadas
 
                 // Format dates to DD-MM-YYYY for API
                 const formatDate = (dateStr) => {
@@ -202,7 +209,7 @@
                 const payload = {
                     start_date: formatDate(startDateInput),
                     end_date: formatDate(endDateInput),
-                    matriculas: matriculas
+                    matriculas: matriculasFinais
                 };
 
                 // Show loading
@@ -235,7 +242,36 @@
                 }
             };
 
-            reader.readAsText(file);
+            // Read the file content se existir
+            if (hasFile) {
+                const file = fileInput.files[0];
+                const reader = new FileReader();
+
+                reader.onload = function (e) {
+                    const text = e.target.result;
+                    const lines = text.split(/\r?\n/);
+
+                    for (let i = 0; i < lines.length; i++) {
+                        const line = lines[i].trim();
+                        if (line) {
+                            // Check if it's purely digits
+                            if (!/^\d+$/.test(line)) {
+                                errorMsg.textContent = `A linha ${i + 1} ("${line}") do arquivo contém caracteres inválidos. O arquivo deve ter apenas números (matrículas).`;
+                                errorMsg.style.display = 'block';
+                                return;
+                            }
+                            todasMatriculas.push(parseInt(line, 10));
+                        }
+                    }
+                    
+                    processarAPI(todasMatriculas);
+                };
+
+                reader.readAsText(file);
+            } else {
+                // Sem arquivo, chama api com as insercoes manuais apenas
+                processarAPI(todasMatriculas);
+            }
         });
 
         function renderResults(data) {

@@ -123,6 +123,7 @@ def change_password():
             db.commit()
             
             session['must_change_password'] = False
+            log_action('Senha alterada com sucesso')
             flash('Senha alterada com sucesso.', 'success')
             db.close()
             return redirect(url_for('home'))
@@ -146,6 +147,7 @@ def logout():
 @app.route('/home')
 @login_required
 def home():
+    log_action('Acessou menu Home (Painel de Bordo)')
     locations = sorted(CLOCK_GROUPS.keys())
     return render_template('home.html', is_admin=session.get('is_admin'), locations=locations)
 
@@ -216,6 +218,7 @@ def reset_password():
 @app.route('/admin/users')
 @admin_required
 def admin_users():
+    log_action('Acessou menu de Gestão de Usuários')
     db = get_db_session()
     users = db.query(User).all()
     db.close()
@@ -224,11 +227,13 @@ def admin_users():
 @app.route('/admin/locais_ponto')
 @admin_required
 def admin_locais_ponto():
+    log_action('Acessou menu de Consulta Locais de Ponto')
     return render_template('admin_locais_ponto.html')
 
 @app.route('/admin/envio_comando')
 @admin_required
 def envio_comando():
+    log_action('Acessou menu de Envio de Comandos')
     return render_template('envio_comando.html')
 
 @app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
@@ -577,6 +582,7 @@ def api_admin_locais_ponto():
 @app.route('/api/envio_comando/relogios', methods=['GET'])
 @admin_required
 def api_envio_comando_relogios():
+    log_action('Consultou lista de relógios disponíveis')
     relogios = fetch_clocks()
     return jsonify(relogios)
 
