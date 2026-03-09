@@ -8,3 +8,4 @@ werkzeug
 python-dotenv
 waitress
 reportlab
+xlrd

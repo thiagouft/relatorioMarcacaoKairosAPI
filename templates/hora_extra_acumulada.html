@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hora Extra Acumulada - Kairos Relatórios</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        .upload-container {
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 30px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .file-upload-wrapper {
+            margin: 20px 0;
+        }
+
+        .file-upload-wrapper input[type="file"] {
+            display: none;
+        }
+
+        .custom-file-upload {
+            border: 2px dashed var(--border-color);
+            display: inline-block;
+            padding: 30px;
+            cursor: pointer;
+            width: 100%;
+            box-sizing: border-box;
+            text-align: center;
+            border-radius: 8px;
+            color: var(--text-gray);
+            transition: all 0.3s ease;
+        }
+
+        .custom-file-upload:hover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+            background-color: rgba(67, 97, 238, 0.05);
+        }
+
+        #file-name {
+            margin-top: 10px;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <a href="{{ url_for('home') }}" class="navbar-brand">Kairos Relatórios</a>
+            <div class="nav-links">
+                <a href="{{ url_for('home') }}">Home</a>
+                {% if is_admin %}
+                <a href="{{ url_for('admin_users') }}">Administração</a>
+                <a href="{{ url_for('admin_locais_ponto') }}">Locais de Ponto</a>
+                <div class="dropdown">
+                    <button class="dropbtn">Comandos do Relógio ▼</button>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('envio_comando') }}#envio">Envio de comando</a>
+                        <a href="{{ url_for('envio_comando') }}#desligamento">Envio de Desligamento</a>
+                    </div>
+                </div>
+                {% endif %}
+                <a href="{{ url_for('hora_extra_acumulada') }}"
+                    style="font-weight: bold; border-bottom: 2px solid var(--accent-color);">Hora Extra Acumulada</a>
+                <a href="{{ url_for('logout') }}">Sair</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <div class="upload-container">
+            <h2 style="text-align: center; margin-bottom: 20px; color: var(--text-color);">Processar Hora Extra
+                Acumulada</h2>
+            <p style="text-align: center; color: var(--text-gray); margin-bottom: 30px;">
+                Selecione o arquivo Excel base contendo a coluna <strong>CHAPA</strong> e
+                <strong>HORAEXTRAEXECUTADA</strong>.
+            </p>
+
+            <form action="{{ url_for('processar_hora_extra') }}" method="POST" enctype="multipart/form-data"
+                id="uploadForm">
+                <div class="file-upload-wrapper">
+                    <label class="custom-file-upload">
+                        <input type="file" name="arquivo_excel" id="file-upload" accept=".xls,.xlsx" required
+                            onchange="updateFileName(this)">
+                        <span style="font-size: 24px; display: block; margin-bottom: 10px;">📄</span>
+                        Clique para selecionar o arquivo (.xls, .xlsx)
+                    </label>
+                    <div id="file-name" style="text-align: center;"></div>
+                </div>
+
+                <button type="submit" class="btn btn-primary"
+                    style="width: 100%; padding: 15px; font-size: 16px; margin-top: 20px;" id="submit-btn" disabled>
+                    Processar e Baixar Relatório
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function updateFileName(input) {
+            const fileNameDiv = document.getElementById('file-name');
+            const submitBtn = document.getElementById('submit-btn');
+
+            if (input.files && input.files[0]) {
+                const fileName = input.files[0].name;
+                fileNameDiv.textContent = 'Arquivo selecionado: ' + fileName;
+                submitBtn.disabled = false;
+            } else {
+                fileNameDiv.textContent = '';
+                submitBtn.disabled = true;
+            }
+        }
+
+        document.getElementById('uploadForm').addEventListener('submit', function () {
+            const btn = document.getElementById('submit-btn');
+            btn.textContent = 'Processando...';
+            btn.disabled = true;
+            btn.style.opacity = '0.7';
+            setTimeout(() => {
+                btn.textContent = 'Processar e Baixar Relatório';
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                document.getElementById('file-upload').value = '';
+                document.getElementById('file-name').textContent = '';
+            }, 3000); // Re-enable after 3 seconds assuming download started
+        });
+    </script>
+</body>
+
+</html>

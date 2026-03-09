@@ -236,6 +236,74 @@ def envio_comando():
     log_action('Acessou menu de Envio de Comandos')
     return render_template('envio_comando.html')
 
+@app.route('/hora_extra_acumulada')
+@login_required
+def hora_extra_acumulada():
+    log_action('Acessou menu de Hora Extra Acumulada')
+    return render_template('hora_extra_acumulada.html', is_admin=session.get('is_admin'))
+
+@app.route('/processar_hora_extra', methods=['POST'])
+@login_required
+def processar_hora_extra():
+    if 'arquivo_excel' not in request.files:
+        flash('Nenhum arquivo enviado.', 'danger')
+        return redirect(url_for('hora_extra_acumulada'))
+        
+    file = request.files['arquivo_excel']
+    if file.filename == '':
+        flash('Nenhum arquivo selecionado.', 'danger')
+        return redirect(url_for('hora_extra_acumulada'))
+        
+    if not (file.filename.endswith('.xls') or file.filename.endswith('.xlsx')):
+        flash('Formato de arquivo inválido. Use .xls ou .xlsx.', 'danger')
+        return redirect(url_for('hora_extra_acumulada'))
+
+    try:
+        df = pd.read_excel(file)
+        
+        if 'CHAPA' not in df.columns or 'HORAEXTRAEXECUTADA' not in df.columns:
+            flash('O arquivo deve conter as colunas CHAPA e HORAEXTRAEXECUTADA.', 'danger')
+            return redirect(url_for('hora_extra_acumulada'))
+
+        def hora_para_timedelta(hora_str):
+            try:
+                h, m, *s = map(int, str(hora_str).split(':'))
+                seconds = s[0] if s else 0
+                return datetime.timedelta(hours=h, minutes=m, seconds=seconds)
+            except Exception:
+                return datetime.timedelta(0)
+
+        def timedelta_para_str(td):
+            total_seconds = int(td.total_seconds())
+            horas = total_seconds // 3600
+            minutos = (total_seconds % 3600) // 60
+            segundos = total_seconds % 60
+            return f"{horas:02d}:{minutos:02d}:{segundos:02d}"
+
+        df['HORAEXTRAEXECUTADA'] = df['HORAEXTRAEXECUTADA'].apply(hora_para_timedelta)
+        resultado = df.groupby('CHAPA')['HORAEXTRAEXECUTADA'].sum().reset_index()
+        resultado['HORAEXTRAEXECUTADA'] = resultado['HORAEXTRAEXECUTADA'].apply(timedelta_para_str)
+        
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            resultado.to_excel(writer, index=False, sheet_name='Relatorio')
+            
+        output.seek(0)
+        
+        log_action('Processou planilha de Hora Extra Acumulada')
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name='relatorio_hora_extra.xlsx'
+        )
+
+    except Exception as e:
+        log_action(f'Erro ao processar Hora Extra Acumulada: {str(e)}')
+        flash(f'Erro ao processar arquivo: {str(e)}', 'danger')
+        return redirect(url_for('hora_extra_acumulada'))
+
 @app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
 @admin_required
 def delete_user(user_id):
