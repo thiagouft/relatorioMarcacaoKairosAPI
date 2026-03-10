@@ -375,7 +375,7 @@ def fetch_all_employees_map():
 CLOCK_GROUPS = {
   "P10": [1, 11, 23,29],
   "COCA": [3, 14, 31],
-  "CANTEIRO III": [7, 18, 22, 24, 25],
+  "CANTEIRO III": [18, 22, 24, 25],
   "PIPE MARABA": [5, 9, 20],
   "OFICINA II": [8],
   "PIPE SAO FELIX": [2, 4, 10, 28],
@@ -386,6 +386,7 @@ CLOCK_GROUPS = {
   "TENDA MOTORISTAS III": [26],
   "NAUTICA": [30],
   "PI SAO FELIX": [35,36],
+  "CENTRAL DE CONCRETO III": [7, 15],
   "DOMINGO": [17, 27],
 }
 
