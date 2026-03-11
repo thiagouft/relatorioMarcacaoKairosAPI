@@ -147,9 +147,15 @@ def logout():
 @app.route('/home')
 @login_required
 def home():
-    log_action('Acessou menu Home (Painel de Bordo)')
+    log_action('Acessou menu Home')
+    return render_template('home.html', is_admin=session.get('is_admin'))
+
+@app.route('/relatorio')
+@login_required
+def relatorio():
+    log_action('Acessou menu Relatório')
     locations = sorted(CLOCK_GROUPS.keys())
-    return render_template('home.html', is_admin=session.get('is_admin'), locations=locations)
+    return render_template('relatorio.html', is_admin=session.get('is_admin'), locations=locations)
 
 # --- User Management (Admin Only) ---
 

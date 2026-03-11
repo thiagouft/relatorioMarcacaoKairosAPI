@@ -72,6 +72,7 @@
             <div class="nav-links">
                 <span>Olá, <span style="text-transform: capitalize;">{{ session['username'] }}</span></span>
                 <a href="{{ url_for('home') }}">Home</a>
+                <a href="{{ url_for('relatorio') }}">Relatório</a>
                 {% if is_admin %}
                 <a href="{{ url_for('admin_users') }}">Administração</a>
                 <a href="{{ url_for('admin_locais_ponto') }}" class="active"
