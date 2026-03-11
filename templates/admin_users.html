@@ -28,7 +28,9 @@
                     </div>
                 </div>
                 {% endif %}
+                {% if is_admin %}
                 <a href="{{ url_for('hora_extra_acumulada') }}">Hora Extra Acumulada</a>
+                {% endif %}
                 <a href="{{ url_for('logout') }}">Sair</a>
             </div>
         </div>
