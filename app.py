@@ -947,6 +947,90 @@ def api_envio_comando_desligar():
         print(f"Erro ao processar desligamento: {e}")
         return jsonify({'sucesso': False, 'mensagem': f'Erro ao processar: {str(e)}'}), 500
 
+@app.route('/api/envio_comando_por_local', methods=['POST'])
+@admin_required
+def api_envio_comando_por_local():
+    try:
+        data = request.json
+        location = data.get('location')
+        crachas = data.get('crachas', [])
+
+        if not location or not crachas:
+            return jsonify({'sucesso': False, 'mensagem': 'Local e lista de crachás são obrigatórios.'}), 400
+
+        clock_ids = CLOCK_GROUPS.get(location, [])
+        if not clock_ids:
+            return jsonify({'sucesso': False, 'mensagem': f'Local {location} não encontrado nos grupos de relógios.'}), 400
+
+        config_options = {
+            'EnviarListaCredenciais': True,
+            'EnviarListaTemplate': True
+        }
+
+        pesquisa_falha = []
+        crachas_sucesso = []
+
+        for cracha in crachas:
+            result = fetch_cracha(cracha)
+            if not result.get('sucesso'):
+                pesquisa_falha.append(result)
+            else:
+                crachas_sucesso.append(result)
+                if result.get('semTemplates'):
+                    pesquisa_falha.append({
+                        'cracha': result.get('cracha'),
+                        'nome': result.get('nome'),
+                        'sucesso': False,
+                        'mensagem': result.get('mensagem', 'Não possui Biometria'),
+                        'dataDesligamento': result.get('dataDesligamento')
+                    })
+
+        result_response = {
+            'sucesso': False,
+            'mensagem': 'Nenhum crachá válido encontrado para processamento.',
+            'falhas': pesquisa_falha
+        }
+
+        falha_file_name = None
+        if pesquisa_falha:
+            log_file_name = 'falha_consulta_local.txt'
+            normalized = []
+            for p in pesquisa_falha:
+                normalized.append({
+                    'cracha': p.get('cracha'),
+                    'nome': p.get('nome'),
+                    'sucesso': p.get('sucesso', False),
+                    'mensagem': p.get('mensagem', ''),
+                    'dataDesligamento': p.get('dataDesligamento')
+                })
+            with open(os.path.join(app.root_path, 'static', log_file_name), 'w', encoding='utf-8') as f:
+                json.dump(normalized, f, indent=2, ensure_ascii=False)
+            falha_file_name = log_file_name
+
+        if crachas_sucesso:
+            cracha_list = [c.get('cracha') for c in crachas_sucesso]
+            schedule_result = schedule_commands(cracha_list, config_options, clock_ids)
+
+            if schedule_result.get('sucesso'):
+                cabecalho = generate_cabecalho_arquivo(clock_ids, config_options)
+                sucesso_file_name = f'sucesso_inclusao_{location.replace(" ", "_")}.pdf'
+                sucesso_content = [f"Crachá: {c.get('cracha')}, Nome: {c.get('nome')}" for c in crachas_sucesso]
+                generate_pdf_report(os.path.join(app.root_path, 'static', sucesso_file_name), cabecalho, sucesso_content)
+
+                schedule_result['sucessoFileName'] = sucesso_file_name
+
+            result_response = schedule_result
+            result_response['falhas'] = pesquisa_falha
+            if falha_file_name:
+                result_response['falhaFileName'] = falha_file_name
+
+        log_action(f"Processado comandos para local {location} com {len(crachas)} crachás")
+        return jsonify(result_response)
+
+    except Exception as e:
+        print(f"Erro no processamento por local: {e}")
+        return jsonify({'sucesso': False, 'mensagem': f'Erro ao processar: {str(e)}'}), 500
+
 @app.route('/api/export', methods=['POST'])
 @login_required
 def export_excel():

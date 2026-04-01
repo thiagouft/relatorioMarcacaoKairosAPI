@@ -27,3 +27,6 @@ static/sucesso_associacao.pdf
 static/falhas_associacao.json
 static/sucesso_desligamento.pdf
 static/falha_desligamento.json
+
+#arquivos de relatório
+*.pdf

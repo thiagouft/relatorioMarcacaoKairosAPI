@@ -62,6 +62,29 @@
             background-color: #fff3cd;
             color: #856404;
         }
+        
+        .success {
+            color: #38a169;
+            font-weight: 500;
+        }
+        
+        .error {
+            color: #e53e3e;
+            font-weight: 500;
+        }
+        
+        .download-section {
+            margin-top: 10px;
+        }
+        
+        .download-section a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        
+        .download-section a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 
@@ -304,6 +327,24 @@
                         });
 
                         groupDiv.appendChild(listDiv);
+
+                        // Add button for sending command
+                        const button = document.createElement('button');
+                        button.textContent = 'Enviar Comando (Credenciais + Templates)';
+                        button.className = 'btn btn-primary';
+                        button.style.margin = '10px auto';
+                        button.style.display = 'block';
+                        button.style.width = 'fit-content';
+                        button.onclick = () => enviarComandoParaLocal(grupo, crachas, button);
+                        groupDiv.appendChild(button);
+
+                        // Add result div for this group
+                        const resultDiv = document.createElement('div');
+                        resultDiv.className = 'command-result';
+                        resultDiv.style.marginTop = '10px';
+                        resultDiv.style.display = 'none';
+                        groupDiv.appendChild(resultDiv);
+
                         container.appendChild(groupDiv);
                     }
                 }
@@ -360,6 +401,66 @@
             }
 
             container.style.display = 'block';
+        }
+
+        // Function to send command for a specific location
+        async function enviarComandoParaLocal(grupo, crachas, button) {
+            const resultDiv = button.nextElementSibling;
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = 'Processando...';
+
+            try {
+                const response = await fetch('/api/envio_comando_por_local', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        location: grupo,
+                        crachas: crachas
+                    })
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.mensagem || 'Erro na requisição.');
+                }
+
+                if (result.sucesso) {
+                    resultDiv.innerHTML = `
+                        <p class="success">${result.mensagem}</p>
+                        <p class="success">Comandos agendados com sucesso para o relógio.</p>
+                    `;
+                    renderDownloads(resultDiv, result);
+                } else {
+                    resultDiv.innerHTML = `<p class="error">${result.mensagem}</p>`;
+                    renderDownloads(resultDiv, result);
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<p class="error">Erro: ${error.message}</p>`;
+            }
+        }
+
+        // Render downloads
+        function renderDownloads(resultDiv, result) {
+            const existing = resultDiv.querySelectorAll('.download-section');
+            existing.forEach((el) => el.remove());
+
+            const parts = [];
+            if (result.sucessoFileName) {
+                parts.push(`<a href="/static/${result.sucessoFileName}" target="_blank">📥 Baixar Arquivo de Sucesso</a>`);
+            }
+            if (result.falhaFileName) {
+                parts.push(`<a href="/static/${result.falhaFileName}" target="_blank">📥 Baixar Arquivo de Falhas</a>`);
+            }
+            if (result.logFileName) {
+                parts.push(`<a href="/static/${result.logFileName}" target="_blank">📥 Baixar Log de Falhas</a>`);
+            }
+            if (parts.length === 0) return;
+
+            const div = document.createElement('div');
+            div.className = 'download-section';
+            div.innerHTML = '<strong>Arquivos Gerados:</strong><br>' + parts.join('<br>');
+            resultDiv.appendChild(div);
         }
     </script>
 </body>
