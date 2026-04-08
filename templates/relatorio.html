@@ -17,9 +17,13 @@
                 <span>Olá, <span style="text-transform: capitalize;">{{ session['username'] }}</span></span>
                 <a href="{{ url_for('home') }}">Home</a>
                 <a href="{{ url_for('relatorio') }}" style="font-weight: bold; border-bottom: 2px solid var(--accent-color);">Relatório</a>
-                {% if is_admin %}
+                {% if is_admin or permissions.admin_users %}
                 <a href="{{ url_for('admin_users') }}">Administração</a>
+                {% endif %}
+                {% if is_admin or permissions.admin_locais_ponto %}
                 <a href="{{ url_for('admin_locais_ponto') }}">Locais de Ponto</a>
+                {% endif %}
+                {% if is_admin or permissions.envio_comando %}
                 <div class="dropdown">
                     <button class="dropbtn">Comandos do Relógio ▼</button>
                     <div class="dropdown-content">
@@ -28,9 +32,10 @@
                     </div>
                 </div>
                 {% endif %}
-                {% if is_admin %}
+                {% if is_admin or permissions.hora_extra_acumulada %}
                 <a href="{{ url_for('hora_extra_acumulada') }}">Hora Extra Acumulada</a>
                 {% endif %}
+
                 <a href="{{ url_for('logout') }}">Sair</a>
             </div>
         </div>

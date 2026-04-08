@@ -16,10 +16,14 @@
             <div class="nav-links">
                 <a href="{{ url_for('home') }}">Home</a>
                 <a href="{{ url_for('relatorio') }}">Relatório</a>
-                {% if is_admin %}
+                {% if is_admin or permissions.admin_users %}
                 <a href="{{ url_for('admin_users') }}"
                     style="font-weight: bold; border-bottom: 2px solid var(--accent-color);">Administração</a>
+                {% endif %}
+                {% if is_admin or permissions.admin_locais_ponto %}
                 <a href="{{ url_for('admin_locais_ponto') }}">Locais de Ponto</a>
+                {% endif %}
+                {% if is_admin or permissions.envio_comando %}
                 <div class="dropdown">
                     <button class="dropbtn">Comandos do Relógio ▼</button>
                     <div class="dropdown-content">
@@ -28,7 +32,7 @@
                     </div>
                 </div>
                 {% endif %}
-                {% if is_admin %}
+                {% if is_admin or permissions.hora_extra_acumulada %}
                 <a href="{{ url_for('hora_extra_acumulada') }}">Hora Extra Acumulada</a>
                 {% endif %}
                 <a href="{{ url_for('logout') }}">Sair</a>
@@ -118,6 +122,9 @@
                             <td>{{ 'Sim' if user.must_change_password else 'Não' }}</td>
                             <td>
                                 {% if user.username != 'admin' %}
+                                <button type="button" class="btn btn-secondary"
+                                    style="padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px;"
+                                    onclick="openPermissionsModal({{ user.id }}, '{{ user.full_name or user.username }}', {{ user_permissions[user.id] | tojson | forceescape }}, {{ 'true' if user.is_admin else 'false' }})">Permissões</button>
                                 <form method="POST" action="{{ url_for('delete_user', user_id=user.id) }}"
                                     onsubmit="return confirm('Tem certeza que deseja excluir este login?');"
                                     style="display: inline;">
@@ -133,8 +140,87 @@
                     </tbody>
                 </table>
             </div>
+
         </div>
     </div>
+
+    <!-- Modal de Permissões -->
+    <div id="permissionsModal" class="modal"
+        style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4);">
+        <div class="modal-content card"
+            style="background-color: var(--white); margin: 10% auto; padding: 20px; width: 50%; max-width: 500px; border-radius: var(--border-radius); box-shadow: var(--shadow);">
+            <span class="close" onclick="closePermissionsModal()"
+                style="color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
+            <h3 style="margin-top:0;">Gerenciar Permissões</h3>
+            <p style="color: var(--text-gray); margin-bottom: 20px;">Usuário: <strong id="modalUserName"></strong></p>
+
+            <form id="permissionsForm" method="POST" action="">
+                <div class="form-group"
+                    style="padding-bottom:10px; margin-bottom:10px; border-bottom:1px solid var(--border-color);">
+                    <label>
+                        <input type="checkbox" id="perm_is_admin" name="is_admin">
+                        <strong>Administrador do Sistema (Acesso Completo)</strong>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="perm_admin_users" name="admin_users">
+                        Menu Administração (Limitação por Perfil)
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="perm_admin_locais_ponto" name="admin_locais_ponto">
+                        Locais de Ponto
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="perm_envio_comando" name="envio_comando">
+                        Comandos do Relógio
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="perm_hora_extra_acumulada" name="hora_extra_acumulada">
+                        Hora Extra Acumulada
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-primary" style="margin-top: 15px;">Salvar Permissões</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openPermissionsModal(userId, userName, permissionsObj, isAdmin) {
+            document.getElementById('permissionsModal').style.display = 'block';
+            document.getElementById('modalUserName').innerText = userName;
+
+            let permissions = permissionsObj || {};
+
+            // Set form action dynamically
+            document.getElementById('permissionsForm').action = '/admin/update_permissions/' + userId;
+
+            // Set checkboxes based on existing permissions
+            document.getElementById('perm_is_admin').checked = isAdmin === true;
+            document.getElementById('perm_admin_users').checked = permissions.admin_users === true;
+            document.getElementById('perm_admin_locais_ponto').checked = permissions.admin_locais_ponto === true;
+            document.getElementById('perm_envio_comando').checked = permissions.envio_comando === true;
+            document.getElementById('perm_hora_extra_acumulada').checked = permissions.hora_extra_acumulada === true;
+        }
+
+        function closePermissionsModal() {
+            document.getElementById('permissionsModal').style.display = 'none';
+        }
+
+        // Close when clicking outside of the modal content
+        window.onclick = function (event) {
+            var modal = document.getElementById('permissionsModal');
+            if (event.target == modal) {
+                closePermissionsModal();
+            }
+        }
+    </script>
 </body>
 
 </html>

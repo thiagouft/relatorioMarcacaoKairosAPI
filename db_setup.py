@@ -1,9 +1,10 @@
 import pyodbc
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from werkzeug.security import generate_password_hash
 import datetime
 from config import Config
+import json
 
 # 1. Create Database if not exists (using raw pyodbc because sqlalchemy needs an existing DB to connect usually, or master)
 def create_database():
@@ -36,6 +37,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     is_admin = Column(Boolean, default=False)
     must_change_password = Column(Boolean, default=True)
+    menu_permissions = Column(String(500), default='{}')  # JSON string for menu permissions
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 class Log(Base):
@@ -50,7 +52,22 @@ class Log(Base):
 def init_db():
     engine = create_engine(Config.SQLALCHEMY_DATABASE_URI)
     Base.metadata.create_all(engine)
-    
+
+    # Ensure existing DB has the new menu_permissions column
+    with engine.connect() as conn:
+        result = conn.execute(text(
+            "SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.COLUMNS "
+            "WHERE TABLE_NAME = 'users' AND COLUMN_NAME = 'menu_permissions'"
+        ))
+        count = result.scalar()
+        if count == 0:
+            print("Adicionando coluna menu_permissions à tabela users...")
+            conn.execute(text(
+                "ALTER TABLE users ADD menu_permissions VARCHAR(500) NOT NULL DEFAULT ('{}')"
+            ))
+            conn.commit()
+            print("Coluna menu_permissions adicionada com sucesso.")
+
     Session = sessionmaker(bind=engine)
     session = Session()
     

@@ -47,14 +47,27 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
-def admin_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session or not session.get('is_admin'):
+def permission_required(permission_name=None):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if 'user_id' not in session:
+                return redirect(url_for('login'))
+                
+            if session.get('is_admin'):
+                return f(*args, **kwargs)
+                
+            if permission_name:
+                permissions = get_menu_permissions()
+                if not permissions.get(permission_name):
+                    flash('Acesso negado. Você não tem permissão para acessar esta página.', 'danger')
+                    return redirect(url_for('home'))
+                return f(*args, **kwargs)
+                
             flash('Acesso negado. Requer privilégios de administrador.', 'danger')
             return redirect(url_for('home'))
-        return f(*args, **kwargs)
-    return decorated_function
+        return decorated_function
+    return decorator
 
 def log_action(action):
     db = get_db_session()
@@ -83,15 +96,22 @@ def login():
         
         db = get_db_session()
         user = db.query(User).filter_by(email=email).first()
-        db.close()
-        
         if user and check_password_hash(user.password_hash, password):
+            if user.menu_permissions is None or not user.menu_permissions.strip():
+                user.menu_permissions = json.dumps({
+                    'admin_users': False,
+                    'admin_locais_ponto': False,
+                    'envio_comando': False,
+                    'hora_extra_acumulada': False
+                })
+                db.commit()
             session['user_id'] = user.id
             session['username'] = user.username # Keep for legacy or display
             session['full_name'] = user.full_name
             session['is_admin'] = user.is_admin
             session['must_change_password'] = user.must_change_password
             
+            db.close()
             log_action('Login realizado com sucesso')
             
             if user.must_change_password:
@@ -99,6 +119,7 @@ def login():
                 
             return redirect(url_for('home'))
         else:
+            db.close()
             flash('Email ou senha inválidos', 'danger')
             
     return render_template('login.html')
@@ -144,23 +165,41 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
+def get_menu_permissions():
+    if session.get('is_admin'):
+        # Admins have all permissions
+        return {
+            "admin_users": True,
+            "admin_locais_ponto": True,
+            "envio_comando": True,
+            "hora_extra_acumulada": True
+        }
+    db = get_db_session()
+    user = db.query(User).get(session.get('user_id'))
+    db.close()
+    if user and user.menu_permissions:
+        return json.loads(user.menu_permissions)
+    return {}
+
 @app.route('/home')
 @login_required
 def home():
     log_action('Acessou menu Home')
-    return render_template('home.html', is_admin=session.get('is_admin'))
+    permissions = get_menu_permissions()
+    return render_template('home.html', is_admin=session.get('is_admin'), permissions=permissions)
 
 @app.route('/relatorio')
 @login_required
 def relatorio():
     log_action('Acessou menu Relatório')
     locations = sorted(CLOCK_GROUPS.keys())
-    return render_template('relatorio.html', is_admin=session.get('is_admin'), locations=locations)
+    permissions = get_menu_permissions()
+    return render_template('relatorio.html', is_admin=session.get('is_admin'), locations=locations, permissions=permissions)
 
 # --- User Management (Admin Only) ---
 
 @app.route('/admin/create_user', methods=['POST'])
-@admin_required
+@permission_required('admin_users')
 def create_user():
     email = request.form['email']
     full_name = request.form['full_name']
@@ -199,8 +238,30 @@ def create_user():
     flash(f'Usuário {full_name} ({email}) criado com sucesso.', 'success')
     return redirect(url_for('admin_users'))
 
+@app.route('/admin/update_permissions/<int:user_id>', methods=['POST'])
+@permission_required('admin_users')
+def update_permissions(user_id):
+    permissions = {
+        'admin_users': 'admin_users' in request.form,
+        'admin_locais_ponto': 'admin_locais_ponto' in request.form,
+        'envio_comando': 'envio_comando' in request.form,
+        'hora_extra_acumulada': 'hora_extra_acumulada' in request.form
+    }
+    is_admin = 'is_admin' in request.form
+    db = get_db_session()
+    user = db.query(User).get(user_id)
+    if user:
+        if user.username != 'admin':
+            user.is_admin = is_admin
+        user.menu_permissions = json.dumps(permissions)
+        db.commit()
+        log_action(f'Atualizou permissões de menu para usuário: {user.username}')
+        flash(f'Permissões de {user.username} atualizadas.', 'success')
+    db.close()
+    return redirect(url_for('admin_users'))
+
 @app.route('/admin/reset_password', methods=['POST'])
-@admin_required
+@permission_required('admin_users')
 def reset_password():
     username = request.form['username']
     new_password = request.form['new_password']
@@ -222,31 +283,42 @@ def reset_password():
     return redirect(url_for('admin_users'))
 
 @app.route('/admin/users')
-@admin_required
+@permission_required('admin_users')
 def admin_users():
     log_action('Acessou menu de Gestão de Usuários')
     db = get_db_session()
     users = db.query(User).all()
     db.close()
-    return render_template('admin_users.html', users=users)
+    permissions = get_menu_permissions()
+    # For each user, load their permissions
+    user_permissions = {}
+    for user in users:
+        if user.menu_permissions:
+            user_permissions[user.id] = json.loads(user.menu_permissions)
+        else:
+            user_permissions[user.id] = {}
+    return render_template('admin_users.html', users=users, is_admin=session.get('is_admin'), permissions=permissions, user_permissions=user_permissions)
 
 @app.route('/admin/locais_ponto')
-@admin_required
+@permission_required('admin_locais_ponto')
 def admin_locais_ponto():
     log_action('Acessou menu de Consulta Locais de Ponto')
-    return render_template('admin_locais_ponto.html')
+    permissions = get_menu_permissions()
+    return render_template('admin_locais_ponto.html', is_admin=session.get('is_admin'), permissions=permissions)
 
 @app.route('/admin/envio_comando')
-@admin_required
+@permission_required('envio_comando')
 def envio_comando():
     log_action('Acessou menu de Envio de Comandos')
-    return render_template('envio_comando.html')
+    permissions = get_menu_permissions()
+    return render_template('envio_comando.html', is_admin=session.get('is_admin'), permissions=permissions)
 
 @app.route('/hora_extra_acumulada')
-@login_required
+@permission_required('hora_extra_acumulada')
 def hora_extra_acumulada():
+    permissions = get_menu_permissions()
     log_action('Acessou menu de Hora Extra Acumulada')
-    return render_template('hora_extra_acumulada.html', is_admin=session.get('is_admin'))
+    return render_template('hora_extra_acumulada.html', is_admin=session.get('is_admin'), permissions=permissions)
 
 @app.route('/processar_hora_extra', methods=['POST'])
 @login_required
@@ -311,7 +383,7 @@ def processar_hora_extra():
         return redirect(url_for('hora_extra_acumulada'))
 
 @app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
-@admin_required
+@permission_required('admin_users')
 def delete_user(user_id):
     db = get_db_session()
     user = db.query(User).get(user_id)
@@ -563,7 +635,7 @@ def get_appointments():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/admin/locais_ponto', methods=['POST'])
-@admin_required
+@permission_required('admin_locais_ponto')
 def api_admin_locais_ponto():
     data = request.json
     start_date = data.get('start_date')
@@ -655,14 +727,14 @@ def api_admin_locais_ponto():
 # --- Envio de Comandos API ---
 
 @app.route('/api/envio_comando/relogios', methods=['GET'])
-@admin_required
+@permission_required('envio_comando')
 def api_envio_comando_relogios():
     log_action('Consultou lista de relógios disponíveis')
     relogios = fetch_clocks()
     return jsonify(relogios)
 
 @app.route('/api/envio_comando/processar', methods=['POST'])
-@admin_required
+@permission_required('envio_comando')
 def api_envio_comando_processar():
     try:
         comandos_str = request.form.get('comandos', '{}')
@@ -754,7 +826,7 @@ def api_envio_comando_processar():
         return jsonify({'sucesso': False, 'mensagem': f'Erro ao processar: {str(e)}'}), 500
 
 @app.route('/api/envio_comando/associar', methods=['POST'])
-@admin_required
+@permission_required('envio_comando')
 def api_envio_comando_associar():
     try:
         relogios_str = request.form.get('relogios', '[]')
@@ -861,7 +933,7 @@ def api_envio_comando_associar():
         return jsonify({'sucesso': False, 'mensagem': f'Erro ao processar: {str(e)}'}), 500
 
 @app.route('/api/envio_comando/desligar', methods=['POST'])
-@admin_required
+@permission_required('envio_comando')
 def api_envio_comando_desligar():
     try:
         if 'arquivo' not in request.files:
@@ -948,7 +1020,7 @@ def api_envio_comando_desligar():
         return jsonify({'sucesso': False, 'mensagem': f'Erro ao processar: {str(e)}'}), 500
 
 @app.route('/api/envio_comando_por_local', methods=['POST'])
-@admin_required
+@permission_required('envio_comando')
 def api_envio_comando_por_local():
     try:
         data = request.json
