@@ -48,6 +48,12 @@ class Log(Base):
     action = Column(String(255), nullable=False)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
 
+class Setting(Base):
+    __tablename__ = 'settings'
+    id = Column(Integer, primary_key=True)
+    key = Column(String(50), unique=True, nullable=False)
+    value = Column(String(500), nullable=False)
+
 # 3. Create Tables and Seed Admin
 def init_db():
     engine = create_engine(Config.SQLALCHEMY_DATABASE_URI)
