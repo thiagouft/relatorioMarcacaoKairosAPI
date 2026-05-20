@@ -194,7 +194,14 @@ def relatorio():
     log_action('Acessou menu Relatório')
     locations = sorted(CLOCK_GROUPS.keys())
     permissions = get_menu_permissions()
-    return render_template('relatorio.html', is_admin=session.get('is_admin'), locations=locations, permissions=permissions)
+    current_date = datetime.date.today().strftime('%Y-%m-%d')
+    return render_template(
+        'relatorio.html',
+        is_admin=session.get('is_admin'),
+        locations=locations,
+        permissions=permissions,
+        current_date=current_date
+    )
 
 # --- User Management (Admin Only) ---
 
