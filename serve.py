@@ -22,4 +22,6 @@ if __name__ == "__main__":
     print(f"Access locally at: http://localhost:{port}")
     print(f"Access from network at: http://{ip_address}:{port}")
     
-    serve(app, host=host, port=port)
+    # Usamos threads=12 para permitir lidar com múltiplas requisições concorrentes que aguardam a API externa.
+    # Como são threads de I/O (espera de rede) e não de CPU, computadores simples conseguem rodar dezenas delas sem problemas.
+    serve(app, host=host, port=port, threads=12)

@@ -5,12 +5,15 @@ import datetime
 
 from config import Config
 
+# Tempo limite para requisições à API do Kairos (em segundos)
+TIMEOUT = 15
+
 def fetch_cracha(cracha):
     url = "https://www.dimepkairos.com.br/RestServiceApi/People/SearchPerson"
     payload = {"Cracha": cracha, "CarregarBiometrias": "true"}
     
     try:
-        response = requests.post(url, json=payload, headers=Config.KAIROS_HEADERS)
+        response = requests.post(url, json=payload, headers=Config.KAIROS_HEADERS, timeout=TIMEOUT)
         if response.status_code == 200:
             data = response.json()
             if data.get("Sucesso") and data.get("Obj"):
@@ -65,7 +68,7 @@ def unassociate_clocks(cracha_list, relogio_list):
         "RelogioNumero": relogio_list
     }
     try:
-        requests.post(url, json=payload, headers=Config.KAIROS_HEADERS)
+        requests.post(url, json=payload, headers=Config.KAIROS_HEADERS, timeout=TIMEOUT)
     except Exception as e:
         print(f"Erro ao desassociar os crachás: {e}")
 
@@ -78,7 +81,7 @@ def associate_clocks(cracha_list, relogio_list):
         "EnviarListaTemplate": True
     }
     try:
-        response = requests.post(url, json=payload, headers=Config.KAIROS_HEADERS)
+        response = requests.post(url, json=payload, headers=Config.KAIROS_HEADERS, timeout=TIMEOUT)
         if response.status_code == 200 and response.json().get("Sucesso"):
             return {"sucesso": True}
         else:
@@ -96,7 +99,7 @@ def schedule_commands(cracha_list, config_options, relogio_list):
     payload.update(config_options)
     
     try:
-        response = requests.post(url, json=payload, headers=Config.KAIROS_HEADERS)
+        response = requests.post(url, json=payload, headers=Config.KAIROS_HEADERS, timeout=TIMEOUT)
         if response.status_code == 200 and response.json().get("Sucesso"):
             return {"sucesso": True, "mensagem": "Comandos agendados com sucesso.", "detalhes": response.json()}
         return {"sucesso": False, "mensagem": response.json().get("Mensagem", "Falha no agendamento")}
@@ -107,7 +110,7 @@ def fetch_clocks():
     url = "https://www.dimepkairos.com.br/RestServiceApi/Clock/SearchClocks"
     payload = {"TodosRelogios": "true"}
     try:
-        response = requests.post(url, json=payload, headers=Config.KAIROS_HEADERS)
+        response = requests.post(url, json=payload, headers=Config.KAIROS_HEADERS, timeout=TIMEOUT)
         if response.status_code == 200 and response.json().get("Sucesso"):
             return response.json().get("Obj", [])
         return []
@@ -123,7 +126,7 @@ def dismiss_employee(employee, data_desligamento):
         "DATA": data_desligamento
     }
     try:
-        response = requests.post(url, json=payload, headers=Config.KAIROS_HEADERS)
+        response = requests.post(url, json=payload, headers=Config.KAIROS_HEADERS, timeout=TIMEOUT)
         if response.status_code == 200 and response.json().get("Sucesso"):
             return {"sucesso": True, "employee": employee}
         else:

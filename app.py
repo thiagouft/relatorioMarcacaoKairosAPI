@@ -31,6 +31,9 @@ from utils_envio_comando import (
 app = Flask(__name__)
 app.config.from_object(Config)
 
+# Tempo limite para requisições à API externa do Kairos
+TIMEOUT = 15
+
 # Database Setup
 engine = create_engine(app.config['SQLALCHEMY_DATABASE_URI'])
 Session = sessionmaker(bind=engine)
@@ -434,7 +437,8 @@ def fetch_all_employees_map():
             response = requests.post(
                 app.config['KAIROS_SEARCH_PEOPLE_URL'],
                 json=payload,
-                headers=app.config['KAIROS_HEADERS']
+                headers=app.config['KAIROS_HEADERS'],
+                timeout=TIMEOUT
             )
             
             if response.status_code == 200:
@@ -552,7 +556,8 @@ def get_appointments():
             response = requests.post(
                 app.config['KAIROS_API_URL'],
                 json=payload,
-                headers=app.config['KAIROS_HEADERS']
+                headers=app.config['KAIROS_HEADERS'],
+                timeout=TIMEOUT
             )
             
             if response.status_code != 200:
@@ -579,7 +584,8 @@ def get_appointments():
                 p_response = requests.post(
                     app.config['KAIROS_SEARCH_PEOPLE_URL'],
                     json=people_payload,
-                    headers=app.config['KAIROS_HEADERS']
+                    headers=app.config['KAIROS_HEADERS'],
+                    timeout=TIMEOUT
                 )
                 if p_response.status_code == 200:
                     p_data = p_response.json()
@@ -684,7 +690,8 @@ def api_admin_locais_ponto():
             response = requests.post(
                 app.config['KAIROS_API_URL'],
                 json=payload,
-                headers=app.config['KAIROS_HEADERS']
+                headers=app.config['KAIROS_HEADERS'],
+                timeout=TIMEOUT
             )
             
             if response.status_code == 200:
