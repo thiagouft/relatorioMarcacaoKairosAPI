@@ -8,7 +8,7 @@ import io
 import datetime
 import json
 from functools import wraps
-from config import Config
+from config import Config, get_local_now
 from db_setup import User, Log, Base
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, letter
@@ -197,7 +197,7 @@ def relatorio():
     log_action('Acessou menu Relatório')
     locations = sorted(CLOCK_GROUPS.keys())
     permissions = get_menu_permissions()
-    current_date = datetime.date.today().strftime('%Y-%m-%d')
+    current_date = get_local_now().strftime('%Y-%m-%d')
     return render_template(
         'relatorio.html',
         is_admin=session.get('is_admin'),

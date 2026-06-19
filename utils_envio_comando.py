@@ -3,7 +3,7 @@ import json
 import io
 import datetime
 
-from config import Config
+from config import Config, get_local_now
 
 # Tempo limite para requisições à API do Kairos (em segundos)
 TIMEOUT = 15
@@ -181,7 +181,7 @@ def generate_pdf_report(filename, title, content_lines):
         f.write(buffer.getvalue())
 
 def generate_cabecalho_arquivo(relogio_list, comandos):
-    agora = datetime.datetime.now()
+    agora = get_local_now()
     data_hora = agora.strftime("%d/%m/%Y %H:%M:%S")
     
     # Simple lookup for clocks

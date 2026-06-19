@@ -1,11 +1,25 @@
 import os
 import urllib
+import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
 
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'uma_chave_secreta_muito_dificil'
+    
+    # Timezone Configuration (default: America/Sao_Paulo, UTC-3)
+    APP_TIMEZONE = os.environ.get('APP_TIMEZONE', 'America/Sao_Paulo')
+    TIMEZONE_OFFSET = int(os.environ.get('TIMEZONE_OFFSET', -3))
+
+def get_local_now():
+    try:
+        import zoneinfo
+        tz = zoneinfo.ZoneInfo(Config.APP_TIMEZONE)
+        return datetime.datetime.now(tz)
+    except Exception:
+        tz = datetime.timezone(datetime.timedelta(hours=Config.TIMEZONE_OFFSET))
+        return datetime.datetime.now(tz)
     
     # SQL Server Connection
     SERVER = os.environ.get('DB_SERVER')
