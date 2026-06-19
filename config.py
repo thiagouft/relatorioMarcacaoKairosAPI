@@ -11,15 +11,6 @@ class Config:
     # Timezone Configuration (default: America/Sao_Paulo, UTC-3)
     APP_TIMEZONE = os.environ.get('APP_TIMEZONE', 'America/Sao_Paulo')
     TIMEZONE_OFFSET = int(os.environ.get('TIMEZONE_OFFSET', -3))
-
-def get_local_now():
-    try:
-        import zoneinfo
-        tz = zoneinfo.ZoneInfo(Config.APP_TIMEZONE)
-        return datetime.datetime.now(tz)
-    except Exception:
-        tz = datetime.timezone(datetime.timedelta(hours=Config.TIMEZONE_OFFSET))
-        return datetime.datetime.now(tz)
     
     # SQL Server Connection
     SERVER = os.environ.get('DB_SERVER')
@@ -42,3 +33,12 @@ def get_local_now():
         "identifier": os.environ.get('KAIROS_IDENTIFIER'),
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     }
+
+def get_local_now():
+    try:
+        import zoneinfo
+        tz = zoneinfo.ZoneInfo(Config.APP_TIMEZONE)
+        return datetime.datetime.now(tz)
+    except Exception:
+        tz = datetime.timezone(datetime.timedelta(hours=Config.TIMEZONE_OFFSET))
+        return datetime.datetime.now(tz)
