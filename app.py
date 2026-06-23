@@ -1067,7 +1067,10 @@ def api_automacao_stream():
         except Exception as err:
             yield f"data: ❌ Erro na transmissão do log: {str(err)}\n\n"
 
-    return Response(stream_with_context(generate_events()), mimetype='text/event-stream')
+    response = Response(stream_with_context(generate_events()), mimetype='text/event-stream')
+    response.headers['Cache-Control'] = 'no-cache'
+    response.headers['X-Accel-Buffering'] = 'no'
+    return response
 
 @app.route('/api/envio_comando_por_local', methods=['POST'])
 @permission_required('envio_comando')
