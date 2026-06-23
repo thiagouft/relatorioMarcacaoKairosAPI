@@ -9,3 +9,4 @@ python-dotenv==1.2.2
 waitress==3.0.2
 reportlab==4.5.1
 xlrd==2.0.2
+playwright==1.28.0
