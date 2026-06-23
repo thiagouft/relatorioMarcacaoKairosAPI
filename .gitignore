@@ -30,3 +30,6 @@ static/falha_desligamento.json
 
 #arquivos de relatório
 *.pdf
+
+#arquivos de textos
+*.txt

@@ -34,6 +34,8 @@
                     <div class="dropdown-content">
                         <a href="{{ url_for('envio_comando') }}#envio">Envio de comando</a>
                         <a href="{{ url_for('envio_comando') }}#desligamento">Envio de Desligamento</a>
+                        <a href="{{ url_for('envio_comando') }}#ponteiro">Reposição de Ponteiro</a>
+                        <a href="{{ url_for('envio_comando') }}#datahora">Data e Hora</a>
                     </div>
                 </div>
                 {% endif %}
@@ -144,6 +146,43 @@
 
                 <!-- Resultado -->
                 <div id="resultDesligamento" style="display: none; margin-top: 1rem;" class="card"></div>
+            </div>
+
+            <!-- Painel de Reposição de Ponteiro -->
+            <div class="panel left-panel" id="panel-ponteiro" style="display: none;">
+                <h2>Reposição de Ponteiro</h2>
+                <form id="ponteiroForm">
+                    <div class="form-group">
+                        <label for="dataPonteiro">Data da Reposição:</label>
+                        <input type="date" id="dataPonteiro" name="data" required />
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="margin-top: 1rem; width: 100%;">Iniciar Reposição de Ponteiro</button>
+                    <button type="button" id="cancelPonteiro" class="btn btn-danger" style="margin-top: 0.5rem; width: 100%; display: none;">Cancelar Operação</button>
+                </form>
+
+                <!-- Console de Logs (Terminal) -->
+                <div class="console-container" id="consolePonteiro" style="display: none; margin-top: 1.5rem;">
+                    <h3>Progresso da Execução</h3>
+                    <div class="console-log" id="logContentPonteiro"></div>
+                </div>
+            </div>
+
+            <!-- Painel de Data e Hora -->
+            <div class="panel left-panel" id="panel-datahora" style="display: none;">
+                <h2>Data e Hora</h2>
+                <p style="margin-bottom: 1.5rem; color: #4a5568;">
+                    Este comando enviará a data e a hora atual do servidor para todos os relógios de ponto selecionados.
+                </p>
+                <form id="datahoraForm">
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Iniciar Envio de Data e Hora</button>
+                    <button type="button" id="cancelDataHora" class="btn btn-danger" style="margin-top: 0.5rem; width: 100%; display: none;">Cancelar Operação</button>
+                </form>
+
+                <!-- Console de Logs (Terminal) -->
+                <div class="console-container" id="consoleDataHora" style="display: none; margin-top: 1.5rem;">
+                    <h3>Progresso da Execução</h3>
+                    <div class="console-log" id="logContentDataHora"></div>
+                </div>
             </div>
         </div>
     </div>

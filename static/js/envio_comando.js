@@ -4,18 +4,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Handle tab navigation via hash
     function handleHashChange() {
-        const isDesligamento = window.location.hash === '#desligamento';
+        const hash = window.location.hash;
+        const isDesligamento = hash === '#desligamento';
+        const isPonteiro = hash === '#ponteiro';
+        const isDataHora = hash === '#datahora';
+        const isEnvio = hash === '' || hash === '#envio';
+
         const panelComandos = document.getElementById('panel-envio-comandos');
         const panelRelogios = document.getElementById('panel-envio-relogios');
         const panelDesligamento = document.getElementById('panel-desligamento');
+        const panelPonteiro = document.getElementById('panel-ponteiro');
+        const panelDataHora = document.getElementById('panel-datahora');
 
-        if (panelComandos) panelComandos.style.display = isDesligamento ? 'none' : 'block';
+        if (panelComandos) panelComandos.style.display = isEnvio ? 'block' : 'none';
         if (panelRelogios) panelRelogios.style.display = isDesligamento ? 'none' : 'block';
         if (panelDesligamento) panelDesligamento.style.display = isDesligamento ? 'block' : 'none';
+        if (panelPonteiro) panelPonteiro.style.display = isPonteiro ? 'block' : 'none';
+        if (panelDataHora) panelDataHora.style.display = isDataHora ? 'block' : 'none';
     }
 
     window.addEventListener('hashchange', handleHashChange);
     handleHashChange(); // Executar ao carregar a página
+
+    // Set default date for pointer repositioning (yesterday)
+    const dateInput = document.getElementById('dataPonteiro');
+    if (dateInput) {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yyyy = yesterday.getFullYear();
+        const mm = String(yesterday.getMonth() + 1).padStart(2, '0');
+        const dd = String(yesterday.getDate()).padStart(2, '0');
+        dateInput.value = `${yyyy}-${mm}-${dd}`;
+    }
 
     // Renderiza os links de download (remove duplicados antes de inserir)
     function renderDownloads(resultDiv, result) {
@@ -363,5 +383,138 @@ document.addEventListener('DOMContentLoaded', () => {
             resultDiv.innerHTML = `<p class="error">Erro de conexão: ${error.message}</p>`;
         }
     });
+
+    // Reposição de Ponteiro Form Submit Handler (SSE Streaming)
+    const ponteiroForm = document.getElementById('ponteiroForm');
+    if (ponteiroForm) {
+        ponteiroForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const dateVal = document.getElementById('dataPonteiro').value;
+            
+            const selectedClocks = Array.from(
+                document.querySelectorAll('input[name="relogios"]:checked')
+            ).map(cb => parseInt(cb.value, 10));
+
+            if (selectedClocks.length === 0) {
+                alert("Por favor, selecione pelo menos um relógio.");
+                return;
+            }
+
+            const consoleDiv = document.getElementById('consolePonteiro');
+            const logContent = document.getElementById('logContentPonteiro');
+            const cancelBtn = document.getElementById('cancelPonteiro');
+            
+            consoleDiv.style.display = 'block';
+            logContent.innerHTML = '⏳ Conectando ao servidor para iniciar reposição de ponteiro...\n';
+            if (cancelBtn) cancelBtn.style.display = 'block';
+
+            const btn = e.target.querySelector('button[type="submit"]');
+            btn.disabled = true;
+            btn.textContent = 'Processando Reposição...';
+
+            const relogiosParam = encodeURIComponent(JSON.stringify(selectedClocks));
+            const url = `/api/automacao/stream?tipo=ponteiro&data=${dateVal}&relogios=${relogiosParam}`;
+            let eventSource = new EventSource(url);
+
+            const cleanUp = () => {
+                if (eventSource) {
+                    eventSource.close();
+                    eventSource = null;
+                }
+                btn.disabled = false;
+                btn.textContent = 'Iniciar Reposição de Ponteiro';
+                if (cancelBtn) cancelBtn.style.display = 'none';
+            };
+
+            if (cancelBtn) {
+                cancelBtn.onclick = () => {
+                    logContent.innerHTML += '❌ Operação cancelada pelo usuário.\n';
+                    logContent.scrollTop = logContent.scrollHeight;
+                    cleanUp();
+                };
+            }
+
+            eventSource.onmessage = function(event) {
+                logContent.innerHTML += event.data + '\n';
+                logContent.scrollTop = logContent.scrollHeight;
+                
+                if (event.data.includes('🏁 Automação') || event.data.includes('❌ Erro') || event.data.includes('🔒 Navegador encerrado.')) {
+                    cleanUp();
+                }
+            };
+
+            eventSource.onerror = function(err) {
+                logContent.innerHTML += '❌ Erro na conexão com o servidor ou processo abortado.\n';
+                logContent.scrollTop = logContent.scrollHeight;
+                cleanUp();
+            };
+        });
+    }
+
+    // Data e Hora Form Submit Handler (SSE Streaming)
+    const datahoraForm = document.getElementById('datahoraForm');
+    if (datahoraForm) {
+        datahoraForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const selectedClocks = Array.from(
+                document.querySelectorAll('input[name="relogios"]:checked')
+            ).map(cb => parseInt(cb.value, 10));
+
+            if (selectedClocks.length === 0) {
+                alert("Por favor, selecione pelo menos um relógio.");
+                return;
+            }
+
+            const consoleDiv = document.getElementById('consoleDataHora');
+            const logContent = document.getElementById('logContentDataHora');
+            const cancelBtn = document.getElementById('cancelDataHora');
+
+            consoleDiv.style.display = 'block';
+            logContent.innerHTML = '⏳ Conectando ao servidor para iniciar envio de data e hora...\n';
+            if (cancelBtn) cancelBtn.style.display = 'block';
+
+            const btn = e.target.querySelector('button[type="submit"]');
+            btn.disabled = true;
+            btn.textContent = 'Enviando Data e Hora...';
+
+            const relogiosParam = encodeURIComponent(JSON.stringify(selectedClocks));
+            const url = `/api/automacao/stream?tipo=datahora&relogios=${relogiosParam}`;
+            let eventSource = new EventSource(url);
+
+            const cleanUp = () => {
+                if (eventSource) {
+                    eventSource.close();
+                    eventSource = null;
+                }
+                btn.disabled = false;
+                btn.textContent = 'Iniciar Envio de Data e Hora';
+                if (cancelBtn) cancelBtn.style.display = 'none';
+            };
+
+            if (cancelBtn) {
+                cancelBtn.onclick = () => {
+                    logContent.innerHTML += '❌ Operação cancelada pelo usuário.\n';
+                    logContent.scrollTop = logContent.scrollHeight;
+                    cleanUp();
+                };
+            }
+
+            eventSource.onmessage = function(event) {
+                logContent.innerHTML += event.data + '\n';
+                logContent.scrollTop = logContent.scrollHeight;
+                
+                if (event.data.includes('🏁 Automação') || event.data.includes('❌ Erro') || event.data.includes('🔒 Navegador encerrado.')) {
+                    cleanUp();
+                }
+            };
+
+            eventSource.onerror = function(err) {
+                logContent.innerHTML += '❌ Erro na conexão com o servidor ou processo abortado.\n';
+                logContent.scrollTop = logContent.scrollHeight;
+                cleanUp();
+            };
+        });
+    }
 
 });

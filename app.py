@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file, Response, stream_with_context
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -28,6 +28,7 @@ from utils_envio_comando import (
     generate_pdf_report,
     generate_cabecalho_arquivo
 )
+from automacao_relogio import run_relogio_automation
 app = Flask(__name__)
 app.config.from_object(Config)
 
@@ -1028,9 +1029,45 @@ def api_envio_comando_desligar():
             'falhaFileName': falha_file_name
         })
         
+        
     except Exception as e:
         print(f"Erro ao processar desligamento: {e}")
         return jsonify({'sucesso': False, 'mensagem': f'Erro ao processar: {str(e)}'}), 500
+
+@app.route('/api/automacao/stream', methods=['GET'])
+@permission_required('envio_comando')
+def api_automacao_stream():
+    tipo = request.args.get('tipo', 'ponteiro')
+    data_val = request.args.get('data')
+    relogios_str = request.args.get('relogios', '[]')
+    
+    # Process date format (from HTML5 date input YYYY-MM-DD to dimepkairos format DD/MM/YYYY)
+    data_personalizada = None
+    if data_val:
+        try:
+            dt = datetime.datetime.strptime(data_val, '%Y-%m-%d')
+            data_personalizada = dt.strftime('%d/%m/%Y')
+        except ValueError:
+            data_personalizada = data_val
+
+    try:
+        relogio_ids = json.loads(relogios_str)
+        if not isinstance(relogio_ids, list):
+            relogio_ids = None
+    except Exception:
+        relogio_ids = None
+
+    log_action(f"Executou comando de automação '{tipo}' para os relógios: {relogio_ids}")
+
+    def generate_events():
+        try:
+            for log_line in run_relogio_automation(tipo, data_personalizada, relogio_ids):
+                # Send the line clean or wrapped in event stream format
+                yield f"data: {log_line.strip()}\n\n"
+        except Exception as err:
+            yield f"data: ❌ Erro na transmissão do log: {str(err)}\n\n"
+
+    return Response(stream_with_context(generate_events()), mimetype='text/event-stream')
 
 @app.route('/api/envio_comando_por_local', methods=['POST'])
 @permission_required('envio_comando')

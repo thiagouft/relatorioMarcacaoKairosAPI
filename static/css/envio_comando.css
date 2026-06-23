@@ -242,3 +242,49 @@ input[type="checkbox"]:checked::after {
 .btn-deselect-all:hover {
   background-color: #e2e8f0;
 }
+
+/* Styling for Terminal Console logs */
+.console-container {
+  background-color: #1e1e1e;
+  border-radius: 8px;
+  border: 1px solid #333;
+  padding: 1rem;
+  font-family: 'Consolas', 'Courier New', Courier, monospace;
+}
+
+.console-container h3 {
+  color: #fff;
+  font-size: 0.95rem;
+  margin-top: 0;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid #444;
+  padding-bottom: 0.5rem;
+}
+
+.console-log {
+  color: #00ff00;
+  height: 250px;
+  overflow-y: auto;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Custom scrollbar for terminal */
+.console-log::-webkit-scrollbar {
+  width: 8px;
+}
+
+.console-log::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.console-log::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+
+.console-log::-webkit-scrollbar-thumb:hover {
+  background: #777;
+}
