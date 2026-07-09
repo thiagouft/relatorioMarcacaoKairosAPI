@@ -525,8 +525,8 @@ def get_appointments():
 
     req_matricula = data.get('matricula')
     if req_matricula and req_matricula.strip():
-        if days_diff > 60:
-             return jsonify({'error': 'Para consulta individual, o intervalo máximo é de 60 dias'}), 400
+        if days_diff > 365:
+             return jsonify({'error': 'Para consulta individual, o intervalo máximo é de 365 dias'}), 400
     else:
         if days_diff > 5:
              return jsonify({'error': 'Para consulta geral, o intervalo máximo é de 5 dias'}), 400
