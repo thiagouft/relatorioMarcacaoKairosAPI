@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro de Pessoas - Kairos Relatórios</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <a href="{{ url_for('home') }}" class="navbar-brand">Kairos Relatórios</a>
+            <div class="nav-links">
+                <span>Olá, <span style="text-transform: capitalize;">{{ session['username'] }}</span></span>
+                <a href="{{ url_for('home') }}">Home</a>
+                <a href="{{ url_for('relatorio') }}">Relatório</a>
+                {% if is_admin or permissions.admin_users %}
+                <a href="{{ url_for('admin_users') }}">Administração</a>
+                {% endif %}
+                {% if is_admin or permissions.admin_locais_ponto %}
+                <a href="{{ url_for('admin_locais_ponto') }}">Locais de Ponto</a>
+                {% endif %}
+                {% if is_admin or permissions.envio_comando %}
+                <div class="dropdown">
+                    <button class="dropbtn">Comandos do Relógio ▼</button>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('envio_comando') }}#envio">Envio de comando</a>
+                        <a href="{{ url_for('envio_comando') }}#desligamento">Envio de Desligamento</a>
+                        <a href="{{ url_for('envio_comando') }}#ponteiro">Reposição de Ponteiro</a>
+                        <a href="{{ url_for('envio_comando') }}#datahora">Data e Hora</a>
+                    </div>
+                </div>
+                {% endif %}
+                {% if is_admin or permissions.hora_extra_acumulada %}
+                <a href="{{ url_for('hora_extra_acumulada') }}">Hora Extra Acumulada</a>
+                {% endif %}
+                {% if is_admin or permissions.cadastros %}
+                <div class="dropdown">
+                    <button class="dropbtn" style="font-weight: bold; border-bottom: 2px solid var(--accent-color);">Cadastros ▼</button>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('cadastros_pessoas') }}" style="font-weight: bold;">Pessoas</a>
+                        <a href="{{ url_for('cadastros_horarios') }}">Horários</a>
+                        <a href="{{ url_for('cadastros_secao') }}">Seção</a>
+                        <a href="{{ url_for('cadastros_gerencia') }}">Gerência</a>
+                        <a href="{{ url_for('cadastros_situacao') }}">Situação</a>
+                        
+                    </div>
+                </div>
+                {% endif %}
+                <a href="{{ url_for('logout') }}">Sair</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="color: var(--primary-blue); margin: 0;">Cadastro de Pessoas</h2>
+                <a href="{{ url_for('cadastros_importar') }}" class="btn btn-success" style="width: auto;">+ Importar Efetivo (.xls)</a>
+            </div>
+
+            <!-- Search Form -->
+            <form method="GET" action="{{ url_for('cadastros_pessoas') }}" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <input type="text" name="search" class="form-control" placeholder="Pesquisar por Chapa ou Nome..." value="{{ search }}" style="flex: 1;">
+                <button type="submit" class="btn btn-primary" style="width: auto;">Buscar</button>
+                {% if search %}
+                <a href="{{ url_for('cadastros_pessoas') }}" class="btn" style="width: auto; background-color: var(--border-gray); color: var(--dark-bg);">Limpar</a>
+                {% endif %}
+            </form>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Chapa</th>
+                            <th>Nome</th>
+                            <th>Nome Função</th>
+                            <th>Seção</th>
+                            <th>Situação</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if pessoas %}
+                            {% for p in pessoas %}
+                            <tr onclick="window.location='{{ url_for('cadastros_pessoa_detalhe', chapa=p.chapa) }}'" style="cursor: pointer;">
+                                <td><strong>{{ p.chapa }}</strong></td>
+                                <td>{{ p.nome }}</td>
+                                <td>{{ p.nome_funcao or 'Não informada' }}</td>
+                                <td><span title="{{ p.secao_codigo }}">{{ p.secao_desc or 'Não associada' }}</span></td>
+                                <td>
+                                    {% if p.situacao_desc == 'Ativo' %}
+                                    <span style="color: var(--success-green); font-weight: bold;">Ativo</span>
+                                    {% elif p.situacao_desc == 'Demitido' %}
+                                    <span style="color: var(--error-red);">Demitido</span>
+                                    {% else %}
+                                    <span style="color: var(--warning-yellow);">{{ p.situacao_desc or 'Não informada' }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('cadastros_pessoa_detalhe', chapa=p.chapa) }}" class="btn btn-primary" style="padding: 5px 10px; font-size: 0.85rem; width: auto; display: inline-block;">Visualizar</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="6" style="text-align: center; color: var(--text-gray); font-style: italic;">Nenhum funcionário encontrado.</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if total_pages > 1 %}
+            <div class="pagination">
+                <a href="{{ url_for('cadastros_pessoas', page=1, search=search) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == 1 %}pointer-events: none; opacity: 0.5;{% endif %}">&laquo; Primeira</a>
+                <a href="{{ url_for('cadastros_pessoas', page=page-1, search=search) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == 1 %}pointer-events: none; opacity: 0.5;{% endif %}">&lsaquo; Anterior</a>
+                
+                <span style="align-self: center; font-size: 0.9rem; color: var(--text-gray);">Página <strong>{{ page }}</strong> de <strong>{{ total_pages }}</strong></span>
+                
+                <a href="{{ url_for('cadastros_pessoas', page=page+1, search=search) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == total_pages %}pointer-events: none; opacity: 0.5;{% endif %}">Próxima &rsaquo;</a>
+                <a href="{{ url_for('cadastros_pessoas', page=total_pages, search=search) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == total_pages %}pointer-events: none; opacity: 0.5;{% endif %}">Última &raquo;</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <img src="{{ url_for('static', filename='images/mixestec_logo.png') }}" alt="Mixestec Logo" class="footer-logo">
+            <p>Desenvolvido por Thiago Silva Pereira</p>
+        </div>
+    </footer>
+</body>
+</html>

@@ -80,6 +80,19 @@
                 <a href="{{ url_for('hora_extra_acumulada') }}"
                     style="font-weight: bold; border-bottom: 2px solid var(--accent-color);">Hora Extra Acumulada</a>
                 {% endif %}
+                {% if is_admin or permissions.cadastros %}
+                <div class="dropdown">
+                    <button class="dropbtn">Cadastros ▼</button>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('cadastros_pessoas') }}">Pessoas</a>
+                        <a href="{{ url_for('cadastros_horarios') }}">Horários</a>
+                        <a href="{{ url_for('cadastros_secao') }}">Seção</a>
+                        <a href="{{ url_for('cadastros_gerencia') }}">Gerência</a>
+                        <a href="{{ url_for('cadastros_situacao') }}">Situação</a>
+                        
+                    </div>
+                </div>
+                {% endif %}
                 <a href="{{ url_for('logout') }}">Sair</a>
             </div>
         </div>

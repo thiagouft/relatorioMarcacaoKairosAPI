@@ -37,6 +37,19 @@
                 {% if is_admin or permissions.hora_extra_acumulada %}
                 <a href="{{ url_for('hora_extra_acumulada') }}">Hora Extra Acumulada</a>
                 {% endif %}
+                {% if is_admin or permissions.cadastros %}
+                <div class="dropdown">
+                    <button class="dropbtn">Cadastros ▼</button>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('cadastros_pessoas') }}">Pessoas</a>
+                        <a href="{{ url_for('cadastros_horarios') }}">Horários</a>
+                        <a href="{{ url_for('cadastros_secao') }}">Seção</a>
+                        <a href="{{ url_for('cadastros_gerencia') }}">Gerência</a>
+                        <a href="{{ url_for('cadastros_situacao') }}">Situação</a>
+                        
+                    </div>
+                </div>
+                {% endif %}
                 <a href="{{ url_for('logout') }}">Sair</a>
             </div>
         </div>
@@ -188,6 +201,12 @@
                         Hora Extra Acumulada
                     </label>
                 </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="perm_cadastros" name="cadastros">
+                        Cadastros
+                    </label>
+                </div>
                 <button type="submit" class="btn btn-primary" style="margin-top: 15px;">Salvar Permissões</button>
             </form>
         </div>
@@ -209,6 +228,7 @@
             document.getElementById('perm_admin_locais_ponto').checked = permissions.admin_locais_ponto === true;
             document.getElementById('perm_envio_comando').checked = permissions.envio_comando === true;
             document.getElementById('perm_hora_extra_acumulada').checked = permissions.hora_extra_acumulada === true;
+            document.getElementById('perm_cadastros').checked = permissions.cadastros === true;
         }
 
         function closePermissionsModal() {

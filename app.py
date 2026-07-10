@@ -9,7 +9,7 @@ import datetime
 import json
 from functools import wraps
 from config import Config, get_local_now
-from db_setup import User, Log, Base
+from db_setup import User, Log, Base, Horario, Secao, Gerencia, GerenciaSecao, Situacao, Pessoa
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -106,7 +106,8 @@ def login():
                     'admin_users': False,
                     'admin_locais_ponto': False,
                     'envio_comando': False,
-                    'hora_extra_acumulada': False
+                    'hora_extra_acumulada': False,
+                    'cadastros': False
                 })
                 db.commit()
             session['user_id'] = user.id
@@ -176,7 +177,8 @@ def get_menu_permissions():
             "admin_users": True,
             "admin_locais_ponto": True,
             "envio_comando": True,
-            "hora_extra_acumulada": True
+            "hora_extra_acumulada": True,
+            "cadastros": True
         }
     db = get_db_session()
     user = db.query(User).get(session.get('user_id'))
@@ -256,7 +258,8 @@ def update_permissions(user_id):
         'admin_users': 'admin_users' in request.form,
         'admin_locais_ponto': 'admin_locais_ponto' in request.form,
         'envio_comando': 'envio_comando' in request.form,
-        'hora_extra_acumulada': 'hora_extra_acumulada' in request.form
+        'hora_extra_acumulada': 'hora_extra_acumulada' in request.form,
+        'cadastros': 'cadastros' in request.form
     }
     is_admin = 'is_admin' in request.form
     db = get_db_session()
@@ -1261,6 +1264,653 @@ def export_pdf():
     except Exception as e:
         print(f"Erro ao gerar PDF: {e}")
         return jsonify({'error': 'Erro ao gerar PDF'}), 500
+
+# ==========================================
+# --- MODULE: CADASTROS (REGISTRATIONS) ----
+# ==========================================
+
+@app.route('/cadastros/pessoas')
+@login_required
+@permission_required('cadastros')
+def cadastros_pessoas():
+    log_action('Acessou menu de Cadastros - Pessoas')
+    search = request.args.get('search', '').strip()
+    page = request.args.get('page', 1, type=int)
+    per_page = 20
+    
+    db = get_db_session()
+    try:
+        query = db.query(Pessoa)
+        if search:
+            query = query.filter((Pessoa.chapa.like(f"%{search}%")) | (Pessoa.nome.like(f"%{search}%")))
+        
+        total = query.count()
+        total_pages = (total + per_page - 1) // per_page
+        if page < 1: page = 1
+        if total_pages > 0 and page > total_pages: page = total_pages
+        
+        pessoas_list = query.order_by(Pessoa.nome).offset((page - 1) * per_page).limit(per_page).all()
+        
+        # Load dimension names
+        # To avoid N+1 queries, load mappings
+        secoes_map = {s.codigo: s.descricao for s in db.query(Secao).all()}
+        horarios_map = {h.codigo: h.descricao for h in db.query(Horario).all()}
+        situacoes_map = {sit.id: sit.descricao for sit in db.query(Situacao).all()}
+        
+        pessoas_data = []
+        for p in pessoas_list:
+            pessoas_data.append({
+                'chapa': p.chapa,
+                'nome': p.nome,
+                'nome_funcao': p.nome_funcao,
+                'secao_codigo': p.secao_codigo,
+                'secao_desc': secoes_map.get(p.secao_codigo, ''),
+                'horario_codigo': p.horario_codigo,
+                'horario_desc': horarios_map.get(p.horario_codigo, ''),
+                'situacao_desc': situacoes_map.get(p.situacao_id, '')
+            })
+            
+        permissions = get_menu_permissions()
+        return render_template(
+            'cadastros_pessoas.html',
+            pessoas=pessoas_data,
+            page=page,
+            total_pages=total_pages,
+            search=search,
+            permissions=permissions,
+            is_admin=session.get('is_admin')
+        )
+    finally:
+        db.close()
+
+@app.route('/cadastros/pessoas/<chapa>')
+@login_required
+@permission_required('cadastros')
+def cadastros_pessoa_detalhe(chapa):
+    log_action(f'Acessou detalhes da Pessoa: {chapa}')
+    db = get_db_session()
+    try:
+        p = db.query(Pessoa).filter_by(chapa=chapa).first()
+        if not p:
+            flash('Funcionário não encontrado.', 'danger')
+            return redirect(url_for('cadastros_pessoas'))
+            
+        secao = db.query(Secao).filter_by(codigo=p.secao_codigo).first()
+        horario = db.query(Horario).filter_by(codigo=p.horario_codigo).first()
+        situacao = db.query(Situacao).filter_by(id=p.situacao_id).first()
+        
+        permissions = get_menu_permissions()
+        return render_template(
+            'cadastros_pessoa_detalhe.html',
+            pessoa=p,
+            secao=secao,
+            horario=horario,
+            situacao=situacao,
+            permissions=permissions,
+            is_admin=session.get('is_admin')
+        )
+    finally:
+        db.close()
+
+def map_excel_columns(df):
+    import unicodedata
+    import re
+
+    def normalize(text):
+        if not isinstance(text, str):
+            text = str(text)
+        text = unicodedata.normalize('NFKD', text).encode('ASCII', 'ignore').decode('ASCII')
+        text = re.sub(r'[^a-zA-Z0-9]', '', text.lower())
+        return text
+
+    df_cols = list(df.columns)
+    normalized_cols = [normalize(c) for c in df_cols]
+
+    # Define candidates for header matching
+    candidates = {
+        'chapa': ['chapa', 'codigo', 'codigofuncionario'],
+        'nome': ['nome', 'nomefuncionario', 'nomecompleto'],
+        'nome_funcao': ['nomefuncao', 'funcao', 'cargo', 'nomecargo', 'descricaofuncao'],
+        'desc_secao': ['descricaosecao', 'descsecao', 'secaodescricao'],
+        'data_adm': ['datadeadmissao', 'dataadmissao', 'admissao', 'dtadmissao'],
+        'data_dem': ['datadedemissao', 'datademissao', 'demissao', 'dtdemissao'],
+        'desc_horario': ['descricaodohorario', 'descricaohorario', 'deschorario', 'horariodescricao'],
+        'pis': ['nropispasep', 'pispasep', 'pis', 'pasep', 'numeropis'],
+        'horario': ['horario', 'codigohorario', 'codhorario'],
+        'secao': ['secao', 'codigosecao', 'codsecao'],
+        'cpf': ['cpf', 'nrocpf', 'numerocpf'],
+        'data_nasc': ['datadenascimento', 'datanascimento', 'nascimento', 'dtnascimento', 'dtnasc'],
+        'situacao': ['descricaodasituacao', 'descricaosituacao', 'situacao', 'descsituacao']
+    }
+
+    mapping = {}
+    matched_count = 0
+    for key, patterns in candidates.items():
+        found_idx = None
+        for pattern in patterns:
+            if pattern in normalized_cols:
+                found_idx = normalized_cols.index(pattern)
+                matched_count += 1
+                break
+        mapping[key] = found_idx
+
+    # If we matched very few columns by name, assume headerless or completely different headers,
+    # and fall back to positional mapping.
+    if matched_count < 4:
+        num_cols = len(df_cols)
+        if num_cols >= 13:
+            mapping = {
+                'chapa': 0,
+                'nome': 1,
+                'nome_funcao': 2,
+                'desc_secao': 3,
+                'data_adm': 4,
+                'data_dem': 5,
+                'desc_horario': 6,
+                'pis': 7,
+                'horario': 8,
+                'secao': 9,
+                'cpf': 10,
+                'data_nasc': 11,
+                'situacao': 12
+            }
+        elif num_cols == 12:
+            # Data de nascimento is missing (position 11), everything shifts left
+            mapping = {
+                'chapa': 0,
+                'nome': 1,
+                'nome_funcao': 2,
+                'desc_secao': 3,
+                'data_adm': 4,
+                'data_dem': 5,
+                'desc_horario': 6,
+                'pis': 7,
+                'horario': 8,
+                'secao': 9,
+                'cpf': 10,
+                'data_nasc': None,
+                'situacao': 11
+            }
+        else:
+            mapping = {k: None for k in candidates.keys()}
+
+    return mapping
+
+@app.route('/cadastros/importar', methods=['GET', 'POST'])
+@login_required
+@permission_required('cadastros')
+def cadastros_importar():
+    import uuid
+    
+    # Handle GET request: clean up any dangling temp files
+    if request.method == 'GET':
+        temp_file = session.get('temp_import_file')
+        if temp_file:
+            if os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except Exception:
+                    pass
+            session.pop('temp_import_file', None)
+
+    if request.method == 'POST':
+        # Check if this is a confirmation submit
+        is_confirm = request.form.get('confirmar') == 'true'
+        is_cancel = request.form.get('cancelar') == 'true'
+
+        if is_cancel:
+            temp_file = session.get('temp_import_file')
+            if temp_file:
+                if os.path.exists(temp_file):
+                    try:
+                        os.remove(temp_file)
+                    except Exception:
+                        pass
+                session.pop('temp_import_file', None)
+            flash('Importação cancelada pelo usuário.', 'info')
+            return redirect(url_for('cadastros_pessoas'))
+
+        df = None
+        
+        if is_confirm:
+            temp_filepath = session.get('temp_import_file')
+            if not temp_filepath or not os.path.exists(temp_filepath):
+                flash('Arquivo temporário não encontrado. Por favor, envie o arquivo novamente.', 'danger')
+                session.pop('temp_import_file', None)
+                return redirect(request.url)
+            try:
+                df = pd.read_excel(temp_filepath, engine='openpyxl')
+            except Exception as e:
+                flash(f'Erro ao ler o arquivo temporário: {e}', 'danger')
+                try:
+                    os.remove(temp_filepath)
+                except Exception:
+                    pass
+                session.pop('temp_import_file', None)
+                return redirect(request.url)
+        else:
+            if 'file' not in request.files:
+                flash('Nenhum arquivo enviado.', 'danger')
+                return redirect(request.url)
+                
+            file = request.files['file']
+            if file.filename == '':
+                flash('Nenhum arquivo selecionado.', 'danger')
+                return redirect(request.url)
+                
+            if not (file.filename.endswith('.xls') or file.filename.endswith('.xlsx') or file.filename.endswith('.XLS') or file.filename.endswith('.XLSX')):
+                flash('Tipo de arquivo inválido. Apenas .xls ou .xlsx são permitidos.', 'danger')
+                return redirect(request.url)
+                
+            try:
+                engine_to_use = 'xlrd' if (file.filename.endswith('.xls') or file.filename.endswith('.XLS')) else 'openpyxl'
+                file_bytes = io.BytesIO(file.read())
+                df = pd.read_excel(file_bytes, engine=engine_to_use)
+            except Exception as e:
+                flash(f'Erro ao processar o arquivo Excel: {e}', 'danger')
+                return redirect(request.url)
+
+        # Process the dataframe
+        try:
+            mapping = map_excel_columns(df)
+            
+            # Check mandatory columns
+            mandatory_columns_names = {
+                'chapa': 'Chapa',
+                'nome': 'Nome',
+                'nome_funcao': 'Nome Função',
+                'desc_secao': 'Descrição Seção',
+                'data_adm': 'Data de Admissão',
+                'data_dem': 'Data de Demissão',
+                'desc_horario': 'Descrição do Horário',
+                'pis': 'Nro. PIS/PASEP',
+                'horario': 'Horário',
+                'secao': 'Seção',
+                'cpf': 'CPF',
+                'situacao': 'Descrição da Situação'
+            }
+            
+            missing_mandatory = [name for key, name in mandatory_columns_names.items() if mapping[key] is None]
+            if missing_mandatory:
+                # Clean up temp file if present
+                temp_filepath = session.get('temp_import_file')
+                if temp_filepath and os.path.exists(temp_filepath):
+                    try:
+                        os.remove(temp_filepath)
+                    except Exception:
+                        pass
+                session.pop('temp_import_file', None)
+                flash(f'O arquivo enviado possui colunas obrigatórias ausentes: {", ".join(missing_mandatory)}.', 'danger')
+                return redirect(url_for('cadastros_importar'))
+
+            # Check if birth date column is missing and we haven't confirmed yet
+            if mapping['data_nasc'] is None and not is_confirm:
+                # Save df to temp file
+                temp_filename = f"temp_import_{uuid.uuid4().hex}.xlsx"
+                temp_filepath = os.path.join(os.getcwd(), temp_filename)
+                df.to_excel(temp_filepath, index=False)
+                session['temp_import_file'] = temp_filepath
+                
+                permissions = get_menu_permissions()
+                return render_template(
+                    'cadastros_importar.html',
+                    permissions=permissions,
+                    is_admin=session.get('is_admin'),
+                    show_confirm=True,
+                    missing_field='Data de Nascimento'
+                )
+
+            # Proceed to import
+            db = get_db_session()
+            
+            # Cache dimensions for speed
+            secoes = {s.codigo: s.codigo for s in db.query(Secao).all()}
+            horarios = {h.codigo: h.codigo for h in db.query(Horario).all()}
+            situacoes = {sit.descricao.strip().lower(): sit.id for sit in db.query(Situacao).all()}
+            
+            created_count = 0
+            updated_count = 0
+            
+            def clean_numeric_str(val):
+                if pd.isna(val):
+                    return None
+                s = str(val).strip()
+                if s.endswith('.0'):
+                    s = s[:-2]
+                if s.lower() == 'nan':
+                    return None
+                return s
+                
+            def parse_dt(val):
+                if pd.isna(val):
+                    return None
+                if isinstance(val, (datetime.datetime, datetime.date)):
+                    return val
+                try:
+                    return pd.to_datetime(val).to_pydatetime()
+                except Exception:
+                    return None
+                    
+            for _, row in df.iterrows():
+                chapa = clean_numeric_str(row.iloc[mapping['chapa']]) if mapping['chapa'] is not None else None
+                if not chapa:
+                    continue
+                    
+                nome = str(row.iloc[mapping['nome']]).strip() if mapping['nome'] is not None else ""
+                nome_funcao = str(row.iloc[mapping['nome_funcao']]).strip() if (mapping['nome_funcao'] is not None and not pd.isna(row.iloc[mapping['nome_funcao']])) else None
+                data_adm = parse_dt(row.iloc[mapping['data_adm']]) if mapping['data_adm'] is not None else None
+                data_dem = parse_dt(row.iloc[mapping['data_dem']]) if mapping['data_dem'] is not None else None
+                pis = clean_numeric_str(row.iloc[mapping['pis']]) if mapping['pis'] is not None else None
+                horario_cod = clean_numeric_str(row.iloc[mapping['horario']]) if mapping['horario'] is not None else None
+                secao_cod = clean_numeric_str(row.iloc[mapping['secao']]) if mapping['secao'] is not None else None
+                cpf = clean_numeric_str(row.iloc[mapping['cpf']]) if mapping['cpf'] is not None else None
+                
+                if mapping['data_nasc'] is not None:
+                    data_nasc = parse_dt(row.iloc[mapping['data_nasc']])
+                else:
+                    data_nasc = None
+                    
+                sit_desc = str(row.iloc[mapping['situacao']]).strip() if (mapping['situacao'] is not None and not pd.isna(row.iloc[mapping['situacao']])) else ''
+                
+                # Check mapping lookups
+                h_cod = horarios.get(horario_cod)
+                s_cod = secoes.get(secao_cod)
+                sit_id = situacoes.get(sit_desc.lower())
+                
+                # Find if Pessoa exists
+                p = db.query(Pessoa).filter_by(chapa=chapa).first()
+                if p:
+                    p.nome = nome
+                    p.nome_funcao = nome_funcao
+                    p.data_admissao = data_adm
+                    p.data_demissao = data_dem
+                    p.pis_pasep = pis
+                    p.cpf = cpf
+                    p.data_nascimento = data_nasc
+                    p.horario_codigo = h_cod
+                    p.secao_codigo = s_cod
+                    p.situacao_id = sit_id
+                    updated_count += 1
+                else:
+                    new_p = Pessoa(
+                        chapa=chapa,
+                        nome=nome,
+                        nome_funcao=nome_funcao,
+                        data_admissao=data_adm,
+                        data_demissao=data_dem,
+                        pis_pasep=pis,
+                        cpf=cpf,
+                        data_nascimento=data_nasc,
+                        horario_codigo=h_cod,
+                        secao_codigo=s_cod,
+                        situacao_id=sit_id
+                    )
+                    db.add(new_p)
+                    created_count += 1
+            
+            db.commit()
+            log_action(f'Importou planilha de efetivo. Adicionados: {created_count}, Atualizados: {updated_count}')
+            
+            msg = f'Importação concluída com sucesso! {created_count} cadastros novos criados e {updated_count} cadastros atualizados.'
+            if mapping['data_nasc'] is None:
+                msg += ' (Nota: coluna Data de Nascimento ausente - cadastros ficaram com este campo vazio)'
+            
+            flash(msg, 'success')
+            db.close()
+            
+            # Clean up temp file if we used one
+            if is_confirm:
+                temp_filepath = session.get('temp_import_file')
+                if temp_filepath and os.path.exists(temp_filepath):
+                    try:
+                        os.remove(temp_filepath)
+                    except Exception:
+                        pass
+                session.pop('temp_import_file', None)
+                
+            return redirect(url_for('cadastros_pessoas'))
+            
+        except Exception as e:
+            if is_confirm:
+                temp_filepath = session.get('temp_import_file')
+                if temp_filepath and os.path.exists(temp_filepath):
+                    try:
+                        os.remove(temp_filepath)
+                    except Exception:
+                        pass
+                session.pop('temp_import_file', None)
+            flash(f'Erro ao processar o arquivo Excel: {e}', 'danger')
+            return redirect(url_for('cadastros_importar'))
+
+    permissions = get_menu_permissions()
+    return render_template(
+        'cadastros_importar.html',
+        permissions=permissions,
+        is_admin=session.get('is_admin')
+    )
+
+@app.route('/cadastros/horarios')
+@login_required
+@permission_required('cadastros')
+def cadastros_horarios():
+    log_action('Acessou menu de Cadastros - Horários')
+    search = request.args.get('search', '').strip()
+    db = get_db_session()
+    try:
+        query = db.query(Horario)
+        if search:
+            query = query.filter((Horario.codigo.like(f"%{search}%")) | (Horario.descricao.like(f"%{search}%")))
+        horarios = query.order_by(Horario.codigo).all()
+        permissions = get_menu_permissions()
+        return render_template(
+            'cadastros_horarios.html',
+            horarios=horarios,
+            search=search,
+            permissions=permissions,
+            is_admin=session.get('is_admin')
+        )
+    finally:
+        db.close()
+
+@app.route('/cadastros/horarios/<code>')
+@login_required
+@permission_required('cadastros')
+def cadastros_horario_detalhe(code):
+    log_action(f'Acessou detalhes do Horário: {code}')
+    db = get_db_session()
+    try:
+        h = db.query(Horario).filter_by(codigo=code).first()
+        if not h:
+            flash('Horário não encontrado.', 'danger')
+            return redirect(url_for('cadastros_horarios'))
+        pessoas = db.query(Pessoa).filter_by(horario_codigo=code).order_by(Pessoa.nome).all()
+        permissions = get_menu_permissions()
+        return render_template(
+            'cadastros_horario_detalhe.html',
+            horario=h,
+            pessoas=pessoas,
+            permissions=permissions,
+            is_admin=session.get('is_admin')
+        )
+    finally:
+        db.close()
+
+@app.route('/cadastros/secao')
+@login_required
+@permission_required('cadastros')
+def cadastros_secao():
+    log_action('Acessou menu de Cadastros - Seções')
+    search = request.args.get('search', '').strip()
+    db = get_db_session()
+    try:
+        query = db.query(Secao)
+        if search:
+            query = query.filter((Secao.codigo.like(f"%{search}%")) | (Secao.descricao.like(f"%{search}%")))
+        secoes = query.order_by(Secao.codigo).all()
+        
+        gerencia_map = {}
+        links = db.query(GerenciaSecao).all()
+        for link in links:
+            mgr = db.query(Gerencia).get(link.gerencia_id)
+            if mgr:
+                if link.secao_codigo not in gerencia_map:
+                    gerencia_map[link.secao_codigo] = []
+                gerencia_map[link.secao_codigo].append(mgr.nome)
+                
+        permissions = get_menu_permissions()
+        return render_template(
+            'cadastros_secao.html',
+            secoes=secoes,
+            gerencia_map=gerencia_map,
+            search=search,
+            permissions=permissions,
+            is_admin=session.get('is_admin')
+        )
+    finally:
+        db.close()
+
+@app.route('/cadastros/secao/<code>')
+@login_required
+@permission_required('cadastros')
+def cadastros_secao_detalhe(code):
+    log_action(f'Acessou detalhes da Seção: {code}')
+    db = get_db_session()
+    try:
+        s = db.query(Secao).filter_by(codigo=code).first()
+        if not s:
+            flash('Seção não encontrada.', 'danger')
+            return redirect(url_for('cadastros_secao'))
+            
+        links = db.query(GerenciaSecao).filter_by(secao_codigo=code).all()
+        managers = []
+        for l in links:
+            mgr = db.query(Gerencia).get(l.gerencia_id)
+            if mgr:
+                managers.append(mgr)
+                
+        pessoas = db.query(Pessoa).filter_by(secao_codigo=code).order_by(Pessoa.nome).all()
+        permissions = get_menu_permissions()
+        return render_template(
+            'cadastros_secao_detalhe.html',
+            secao=s,
+            managers=managers,
+            pessoas=pessoas,
+            permissions=permissions,
+            is_admin=session.get('is_admin')
+        )
+    finally:
+        db.close()
+
+@app.route('/cadastros/gerencia')
+@login_required
+@permission_required('cadastros')
+def cadastros_gerencia():
+    log_action('Acessou menu de Cadastros - Gerência')
+    search = request.args.get('search', '').strip()
+    db = get_db_session()
+    try:
+        query = db.query(Gerencia)
+        if search:
+            query = query.filter(Gerencia.nome.like(f"%{search}%"))
+        gerencias = query.order_by(Gerencia.nome).all()
+        
+        secoes_map = {}
+        for g in gerencias:
+            links = db.query(GerenciaSecao).filter_by(gerencia_id=g.id).all()
+            sec_list = []
+            for l in links:
+                sec = db.query(Secao).filter_by(codigo=l.secao_codigo).first()
+                if sec:
+                    sec_list.append(sec)
+            secoes_map[g.id] = sec_list
+            
+        permissions = get_menu_permissions()
+        return render_template(
+            'cadastros_gerencia.html',
+            gerencias=gerencias,
+            secoes_map=secoes_map,
+            search=search,
+            permissions=permissions,
+            is_admin=session.get('is_admin')
+        )
+    finally:
+        db.close()
+
+@app.route('/cadastros/gerencia/<int:id>')
+@login_required
+@permission_required('cadastros')
+def cadastros_gerencia_detalhe(id):
+    log_action(f'Acessou detalhes da Gerência ID: {id}')
+    db = get_db_session()
+    try:
+        g = db.query(Gerencia).get(id)
+        if not g:
+            flash('Gerente não encontrado.', 'danger')
+            return redirect(url_for('cadastros_gerencia'))
+            
+        links = db.query(GerenciaSecao).filter_by(gerencia_id=id).all()
+        secoes_codes = [l.secao_codigo for l in links]
+        secoes = db.query(Secao).filter(Secao.codigo.in_(secoes_codes)).all() if secoes_codes else []
+        pessoas = db.query(Pessoa).filter(Pessoa.secao_codigo.in_(secoes_codes)).order_by(Pessoa.nome).all() if secoes_codes else []
+        
+        permissions = get_menu_permissions()
+        return render_template(
+            'cadastros_gerencia_detalhe.html',
+            gerencia=g,
+            secoes=secoes,
+            pessoas=pessoas,
+            permissions=permissions,
+            is_admin=session.get('is_admin')
+        )
+    finally:
+        db.close()
+
+@app.route('/cadastros/situacao')
+@login_required
+@permission_required('cadastros')
+def cadastros_situacao():
+    log_action('Acessou menu de Cadastros - Situações')
+    search = request.args.get('search', '').strip()
+    db = get_db_session()
+    try:
+        query = db.query(Situacao)
+        if search:
+            query = query.filter(Situacao.descricao.like(f"%{search}%"))
+        situacoes = query.order_by(Situacao.id).all()
+        permissions = get_menu_permissions()
+        return render_template(
+            'cadastros_situacao.html',
+            situacoes=situacoes,
+            search=search,
+            permissions=permissions,
+            is_admin=session.get('is_admin')
+        )
+    finally:
+        db.close()
+
+@app.route('/cadastros/situacao/<int:id>')
+@login_required
+@permission_required('cadastros')
+def cadastros_situacao_detalhe(id):
+    log_action(f'Acessou detalhes da Situação ID: {id}')
+    db = get_db_session()
+    try:
+        s = db.query(Situacao).get(id)
+        if not s:
+            flash('Situação não encontrada.', 'danger')
+            return redirect(url_for('cadastros_situacao'))
+            
+        pessoas = db.query(Pessoa).filter_by(situacao_id=id).order_by(Pessoa.nome).all()
+        permissions = get_menu_permissions()
+        return render_template(
+            'cadastros_situacao_detalhe.html',
+            situacao=s,
+            pessoas=pessoas,
+            permissions=permissions,
+            is_admin=session.get('is_admin')
+        )
+    finally:
+        db.close()
 
 if __name__ == '__main__':
     app.run(debug=True)

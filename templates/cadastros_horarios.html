@@ -1,21 +1,19 @@
 <!DOCTYPE html>
 <html lang="pt-br">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Home - Kairos Relatórios</title>
+    <title>Cadastro de Horários - Kairos Relatórios</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 </head>
-
 <body>
     <nav class="navbar">
         <div class="container">
-            <a href="#" class="navbar-brand">Kairos Relatórios</a>
+            <a href="{{ url_for('home') }}" class="navbar-brand">Kairos Relatórios</a>
             <div class="nav-links">
                 <span>Olá, <span style="text-transform: capitalize;">{{ session['username'] }}</span></span>
-                <a href="{{ url_for('home') }}" style="font-weight: bold; border-bottom: 2px solid var(--accent-color);">Home</a>
+                <a href="{{ url_for('home') }}">Home</a>
                 <a href="{{ url_for('relatorio') }}">Relatório</a>
                 {% if is_admin or permissions.admin_users %}
                 <a href="{{ url_for('admin_users') }}">Administração</a>
@@ -39,10 +37,10 @@
                 {% endif %}
                 {% if is_admin or permissions.cadastros %}
                 <div class="dropdown">
-                    <button class="dropbtn">Cadastros ▼</button>
+                    <button class="dropbtn" style="font-weight: bold; border-bottom: 2px solid var(--accent-color);">Cadastros ▼</button>
                     <div class="dropdown-content">
                         <a href="{{ url_for('cadastros_pessoas') }}">Pessoas</a>
-                        <a href="{{ url_for('cadastros_horarios') }}">Horários</a>
+                        <a href="{{ url_for('cadastros_horarios') }}" style="font-weight: bold;">Horários</a>
                         <a href="{{ url_for('cadastros_secao') }}">Seção</a>
                         <a href="{{ url_for('cadastros_gerencia') }}">Gerência</a>
                         <a href="{{ url_for('cadastros_situacao') }}">Situação</a>
@@ -64,17 +62,54 @@
         {% endif %}
         {% endwith %}
 
-        <div class="card" style="display: flex; justify-content: center; align-items: center; min-height: 60vh; text-align: center;">
-            <h2 style="color: var(--text-color); font-weight: normal; font-size: 2rem;">"Trabalhar bem é deixar uma marca que fala por nós."</h2>
+        <div class="card">
+            <h2 style="color: var(--primary-blue); margin-bottom: 20px;">Cadastro de Horários</h2>
+
+            <!-- Search Form -->
+            <form method="GET" action="{{ url_for('cadastros_horarios') }}" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <input type="text" name="search" class="form-control" placeholder="Pesquisar por Código ou Descrição de Horário..." value="{{ search }}" style="flex: 1;">
+                <button type="submit" class="btn btn-primary" style="width: auto;">Buscar</button>
+                {% if search %}
+                <a href="{{ url_for('cadastros_horarios') }}" class="btn" style="width: auto; background-color: var(--border-gray); color: var(--dark-bg);">Limpar</a>
+                {% endif %}
+            </form>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Código do Horário</th>
+                            <th>Descrição do Horário</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if horarios %}
+                            {% for h in horarios %}
+                            <tr>
+                                <td><strong>{{ h.codigo }}</strong></td>
+                                <td>{{ h.descricao }}</td>
+                                <td>
+                                    <a href="{{ url_for('cadastros_horario_detalhe', code=h.codigo) }}" class="btn btn-primary" style="padding: 5px 10px; font-size: 0.85rem; width: auto; display: inline-block;">Visualizar Pessoas</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="3" style="text-align: center; color: var(--text-gray); font-style: italic;">Nenhum horário cadastrado.</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
+
     <footer class="footer">
         <div class="container footer-content">
-            <img src="{{ url_for('static', filename='images/mixestec_logo.png') }}" alt="Mixestec Logo"
-                class="footer-logo">
+            <img src="{{ url_for('static', filename='images/mixestec_logo.png') }}" alt="Mixestec Logo" class="footer-logo">
             <p>Desenvolvido por Thiago Silva Pereira</p>
         </div>
     </footer>
 </body>
-
 </html>

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detalhes da Gerência - Kairos Relatórios</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <a href="{{ url_for('home') }}" class="navbar-brand">Kairos Relatórios</a>
+            <div class="nav-links">
+                <span>Olá, <span style="text-transform: capitalize;">{{ session['username'] }}</span></span>
+                <a href="{{ url_for('home') }}">Home</a>
+                <a href="{{ url_for('relatorio') }}">Relatório</a>
+                {% if is_admin or permissions.admin_users %}
+                <a href="{{ url_for('admin_users') }}">Administração</a>
+                {% endif %}
+                {% if is_admin or permissions.admin_locais_ponto %}
+                <a href="{{ url_for('admin_locais_ponto') }}">Locais de Ponto</a>
+                {% endif %}
+                {% if is_admin or permissions.envio_comando %}
+                <div class="dropdown">
+                    <button class="dropbtn">Comandos do Relógio ▼</button>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('envio_comando') }}#envio">Envio de comando</a>
+                        <a href="{{ url_for('envio_comando') }}#desligamento">Envio de Desligamento</a>
+                        <a href="{{ url_for('envio_comando') }}#ponteiro">Reposição de Ponteiro</a>
+                        <a href="{{ url_for('envio_comando') }}#datahora">Data e Hora</a>
+                    </div>
+                </div>
+                {% endif %}
+                {% if is_admin or permissions.hora_extra_acumulada %}
+                <a href="{{ url_for('hora_extra_acumulada') }}">Hora Extra Acumulada</a>
+                {% endif %}
+                {% if is_admin or permissions.cadastros %}
+                <div class="dropdown">
+                    <button class="dropbtn" style="font-weight: bold; border-bottom: 2px solid var(--accent-color);">Cadastros ▼</button>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('cadastros_pessoas') }}">Pessoas</a>
+                        <a href="{{ url_for('cadastros_horarios') }}">Horários</a>
+                        <a href="{{ url_for('cadastros_secao') }}">Seção</a>
+                        <a href="{{ url_for('cadastros_gerencia') }}" style="font-weight: bold;">Gerência</a>
+                        <a href="{{ url_for('cadastros_situacao') }}">Situação</a>
+                        
+                    </div>
+                </div>
+                {% endif %}
+                <a href="{{ url_for('logout') }}">Sair</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="card" style="margin-bottom: 30px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--primary-blue); padding-bottom: 10px; margin-bottom: 20px;">
+                <h2 style="color: var(--primary-blue); margin: 0;">Ficha da Gerência</h2>
+                <a href="{{ url_for('cadastros_gerencia') }}" class="btn" style="background-color: var(--border-gray); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px;">Voltar</a>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <span style="font-weight: 600; color: var(--text-gray); font-size: 0.95rem; display: block; margin-bottom: 5px;">Nome do Gerente (Gerência)</span>
+                <span style="font-size: 1.25rem; font-weight: bold; color: var(--dark-bg);">{{ gerencia.nome }}</span>
+            </div>
+
+            <div>
+                <span style="font-weight: 600; color: var(--text-gray); font-size: 0.95rem; display: block; margin-bottom: 5px;">Seções Gerenciadas</span>
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px;">
+                    {% if secoes %}
+                        {% for s in secoes %}
+                        <a href="{{ url_for('cadastros_secao_detalhe', code=s.codigo) }}" style="padding: 6px 12px; background-color: var(--light-bg); border: 1px solid var(--border-gray); border-radius: 4px; color: var(--primary-blue); text-decoration: none; font-size: 0.9rem; font-weight: 600;">
+                            📁 {{ s.codigo }} - {{ s.descricao }}
+                        </a>
+                        {% endfor %}
+                    {% else %}
+                        <span style="color: var(--text-gray); font-style: italic;">Nenhuma seção vinculada</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3 style="margin-top: 0; color: var(--dark-bg); margin-bottom: 20px;">Funcionários Sob esta Gerência (Total: {{ pessoas|length }})</h3>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Chapa</th>
+                            <th>Nome</th>
+                            <th>Cargo</th>
+                            <th>Seção</th>
+                            <th>Situação</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if pessoas %}
+                            {% for p in pessoas %}
+                            <tr>
+                                <td><strong>{{ p.chapa }}</strong></td>
+                                <td>{{ p.nome }}</td>
+                                <td>{{ p.nome_funcao or 'Não informado' }}</td>
+                                <td><code>{{ p.secao_codigo }}</code></td>
+                                <td>{{ p.situacao_id or 'Não informada' }}</td> <!-- Shows FK/Desc dynamically or simple text -->
+                                <td>
+                                    <a href="{{ url_for('cadastros_pessoa_detalhe', chapa=p.chapa) }}" class="btn btn-primary" style="padding: 5px 10px; font-size: 0.85rem; width: auto;">Detalhes</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="6" style="text-align: center; color: var(--text-gray); font-style: italic;">Nenhum funcionário sob a gestão deste gerente.</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <img src="{{ url_for('static', filename='images/mixestec_logo.png') }}" alt="Mixestec Logo" class="footer-logo">
+            <p>Desenvolvido por Thiago Silva Pereira</p>
+        </div>
+    </footer>
+</body>
+</html>

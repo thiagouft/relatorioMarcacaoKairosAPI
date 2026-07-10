@@ -12,6 +12,18 @@ def upgrade_database_schema():
     Base.metadata.create_all(engine)
     print("Verificação de novas tabelas (como 'logs') concluída.")
     
+    # Carga de dados iniciais do CPRT
+    from db_setup import seed_initial_data
+    from sqlalchemy.orm import sessionmaker
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    try:
+        seed_initial_data(session)
+    except Exception as e:
+        print(f"Erro ao rodar seed inicial na migração: {e}")
+    finally:
+        session.close()
+    
     # 3. Inspeciona a estrutura para encontrar colunas que foram adicionadas no código Python
     # mas que ainda não existem no banco de dados.
     inspector = inspect(engine)

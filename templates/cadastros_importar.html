@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Importação de Efetivo - Kairos Relatórios</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <a href="{{ url_for('home') }}" class="navbar-brand">Kairos Relatórios</a>
+            <div class="nav-links">
+                <span>Olá, <span style="text-transform: capitalize;">{{ session['username'] }}</span></span>
+                <a href="{{ url_for('home') }}">Home</a>
+                <a href="{{ url_for('relatorio') }}">Relatório</a>
+                {% if is_admin or permissions.admin_users %}
+                <a href="{{ url_for('admin_users') }}">Administração</a>
+                {% endif %}
+                {% if is_admin or permissions.admin_locais_ponto %}
+                <a href="{{ url_for('admin_locais_ponto') }}">Locais de Ponto</a>
+                {% endif %}
+                {% if is_admin or permissions.envio_comando %}
+                <div class="dropdown">
+                    <button class="dropbtn">Comandos do Relógio ▼</button>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('envio_comando') }}#envio">Envio de comando</a>
+                        <a href="{{ url_for('envio_comando') }}#desligamento">Envio de Desligamento</a>
+                        <a href="{{ url_for('envio_comando') }}#ponteiro">Reposição de Ponteiro</a>
+                        <a href="{{ url_for('envio_comando') }}#datahora">Data e Hora</a>
+                    </div>
+                </div>
+                {% endif %}
+                {% if is_admin or permissions.hora_extra_acumulada %}
+                <a href="{{ url_for('hora_extra_acumulada') }}">Hora Extra Acumulada</a>
+                {% endif %}
+                {% if is_admin or permissions.cadastros %}
+                <div class="dropdown">
+                    <button class="dropbtn" style="font-weight: bold; border-bottom: 2px solid var(--accent-color);">Cadastros ▼</button>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('cadastros_pessoas') }}">Pessoas</a>
+                        <a href="{{ url_for('cadastros_horarios') }}">Horários</a>
+                        <a href="{{ url_for('cadastros_secao') }}">Seção</a>
+                        <a href="{{ url_for('cadastros_gerencia') }}">Gerência</a>
+                        <a href="{{ url_for('cadastros_situacao') }}">Situação</a>
+                        
+                    </div>
+                </div>
+                {% endif %}
+                <a href="{{ url_for('logout') }}">Sair</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <div class="card" style="max-width: 600px; margin: 40px auto; padding: 30px;">
+            <h2 style="color: var(--primary-blue); margin-bottom: 20px; border-bottom: 2px solid var(--primary-blue); padding-bottom: 10px;">Importação de Efetivo</h2>
+            <p style="color: var(--text-gray); margin-bottom: 30px; line-height: 1.5;">
+                Selecione o arquivo do efetivo exportado (no formato <strong>.xls</strong> ou <strong>.xlsx</strong>) para carregar a lista de funcionários. 
+                Os registros existentes serão atualizados (com base no número da <strong>Chapa</strong>) e novos funcionários serão inseridos. Os campos de vínculo, 
+                como Seção, Horário e Situação, serão vinculados aos cadastros de referência preexistentes no sistema.
+            </p>
+
+            {% if show_confirm %}
+            <div style="border: 1px solid var(--warning-yellow); background-color: #FEF3C7; color: #92400E; padding: 20px; border-radius: 6px; margin-bottom: 30px;">
+                <h3 style="margin-top: 0; color: #B45309; display: flex; align-items: center; gap: 8px;">
+                    ⚠️ Campo Ausente: {{ missing_field }}
+                </h3>
+                <p style="margin: 0; line-height: 1.5; font-size: 0.95rem;">
+                    A coluna <strong>{{ missing_field }}</strong> não foi encontrada na planilha. Deseja prosseguir com a importação mesmo assim?<br>
+                    Os demais campos obrigatórios foram validados e o campo de Data de Nascimento ficará em branco.
+                </p>
+            </div>
+
+            <form method="POST" action="{{ url_for('cadastros_importar') }}">
+                <input type="hidden" name="confirmar" value="true">
+                <div style="display: flex; gap: 15px;">
+                    <button type="submit" name="cancelar" value="true" class="btn" style="flex: 1; background-color: var(--border-gray); color: var(--dark-bg); border-radius: 4px; line-height: 20px;">Cancelar</button>
+                    <button type="submit" class="btn btn-success" style="flex: 2;">Sim, Importar Mesmo Assim</button>
+                </div>
+            </form>
+            {% else %}
+            <form method="POST" action="{{ url_for('cadastros_importar') }}" enctype="multipart/form-data">
+                <div class="form-group" style="margin-bottom: 30px;">
+                    <label for="file" style="font-weight: bold; margin-bottom: 10px; display: block;">Arquivo Excel (efetivo.xls / .xlsx)</label>
+                    <input type="file" id="file" name="file" class="form-control" accept=".xls,.xlsx" required style="padding: 10px; border: 2px dashed var(--border-gray); background-color: var(--light-bg); cursor: pointer;">
+                </div>
+
+                <div style="display: flex; gap: 15px;">
+                    <a href="{{ url_for('cadastros_pessoas') }}" class="btn" style="flex: 1; background-color: var(--border-gray); color: var(--dark-bg); text-align: center; text-decoration: none; border-radius: 4px; line-height: 20px;">Cancelar</a>
+                    <button type="submit" class="btn btn-success" style="flex: 2;">Iniciar Processamento</button>
+                </div>
+            </form>
+            {% endif %}
+
+            <div id="loading" style="display: none; margin-top: 20px; text-align: center;">
+                <p style="color: var(--warning-yellow); font-weight: bold; margin-bottom: 5px;">Processando arquivo Excel...</p>
+                <p style="font-size: 0.85rem; color: var(--text-gray);">Isso pode levar alguns segundos devido ao volume de registros. Por favor, aguarde.</p>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <img src="{{ url_for('static', filename='images/mixestec_logo.png') }}" alt="Mixestec Logo" class="footer-logo">
+            <p>Desenvolvido por Thiago Silva Pereira</p>
+        </div>
+    </footer>
+
+    <script>
+        document.querySelector('form').addEventListener('submit', function(e) {
+            const submitter = e.submitter || document.activeElement;
+            if (submitter && submitter.value === 'true' && submitter.name === 'cancelar') {
+                return;
+            }
+            
+            document.getElementById('loading').style.display = 'block';
+            
+            const submitBtn = document.querySelector('button[type="submit"]');
+            if (submitBtn) submitBtn.disabled = true;
+            
+            const cancelLink = document.querySelector('a.btn');
+            if (cancelLink) {
+                cancelLink.style.pointerEvents = 'none';
+                cancelLink.style.opacity = '0.5';
+            }
+            
+            const cancelBtn = document.querySelector('button[name="cancelar"]');
+            if (cancelBtn) {
+                cancelBtn.disabled = true;
+                cancelBtn.style.opacity = '0.5';
+            }
+        });
+    </script>
+</body>
+</html>
