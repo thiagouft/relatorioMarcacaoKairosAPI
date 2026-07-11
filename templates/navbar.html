@@ -1,0 +1,73 @@
+<nav class="navbar">
+    <div class="navbar-top">
+        <div class="container">
+            <a href="{{ url_for('home') }}" class="navbar-brand">Kairos CPRT</a>
+            <div class="nav-user">
+                <span>Olá, <span style="text-transform: capitalize;">{{ session.get('username', 'Admin') }}</span></span>
+                <a href="{{ url_for('logout') }}">Sair</a>
+            </div>
+        </div>
+    </div>
+    <div class="navbar-bottom">
+        <div class="container">
+            <div class="nav-links">
+                <!-- 1. Cadastros -->
+                {% if is_admin or permissions.cadastros %}
+                <div class="dropdown">
+                    <button class="dropbtn" {% if active_page == 'cadastros' %}style="font-weight: bold; border-bottom: 2px solid var(--accent-color);"{% endif %}>Cadastros</button>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('cadastros_pessoas') }}">Pessoas</a>
+                        <a href="{{ url_for('cadastros_horarios') }}">Horários</a>
+                        <a href="{{ url_for('cadastros_secao') }}">Seção</a>
+                        <a href="{{ url_for('cadastros_gerencia') }}">Gerência</a>
+                        <a href="{{ url_for('cadastros_situacao') }}">Situação</a>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- 2. Comandos do Relógio -->
+                {% if is_admin or permissions.envio_comando or permissions.admin_locais_ponto %}
+                <div class="dropdown">
+                    <button class="dropbtn" {% if active_page in ['envio_comando', 'admin_locais_ponto'] %}style="font-weight: bold; border-bottom: 2px solid var(--accent-color);"{% endif %}>Comandos do Relógio</button>
+                    <div class="dropdown-content">
+                        {% if is_admin or permissions.envio_comando %}
+                        <a href="{{ url_for('envio_comando') }}#envio">Envio de comando</a>
+                        {% endif %}
+                        {% if is_admin or permissions.admin_locais_ponto %}
+                        <a href="{{ url_for('admin_locais_ponto') }}">Locais de Ponto</a>
+                        {% endif %}
+                        {% if is_admin or permissions.envio_comando %}
+                        <a href="{{ url_for('envio_comando') }}#ponteiro">Reposição de Ponteiro</a>
+                        <a href="{{ url_for('envio_comando') }}#datahora">Envio de Data e Hora</a>
+                        <a href="{{ url_for('envio_comando') }}#desligamento">Envio de Desligamento</a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- 3. Ferramentas -->
+                {% if is_admin or permissions.hora_extra_acumulada %}
+                <div class="dropdown">
+                    <button class="dropbtn" {% if active_page == 'hora_extra_acumulada' %}style="font-weight: bold; border-bottom: 2px solid var(--accent-color);"{% endif %}>Ferramentas</button>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('hora_extra_acumulada') }}">Hora Extra Acumulada</a>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- 4. Marcações -->
+                <a href="{{ url_for('marcacoes') }}" {% if active_page == 'marcacoes' %}style="font-weight: bold; border-bottom: 2px solid var(--accent-color);"{% endif %}>Marcações</a>
+
+                <!-- 5. Definições (dropdown com Usuários) -->
+                {% if is_admin or permissions.admin_users %}
+                <div class="dropdown">
+                    <button class="dropbtn" {% if active_page == 'admin_users' %}style="font-weight: bold; border-bottom: 2px solid var(--accent-color);"{% endif %}>Definições</button>
+                    <div class="dropdown-content">
+                        <a href="{{ url_for('admin_users') }}">Usuários</a>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</nav>

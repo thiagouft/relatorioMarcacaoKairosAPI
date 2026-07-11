@@ -194,15 +194,15 @@ def home():
     permissions = get_menu_permissions()
     return render_template('home.html', is_admin=session.get('is_admin'), permissions=permissions)
 
-@app.route('/relatorio')
+@app.route('/marcacoes')
 @login_required
-def relatorio():
-    log_action('Acessou menu Relatório')
+def marcacoes():
+    log_action('Acessou menu Marcações')
     locations = sorted(CLOCK_GROUPS.keys())
     permissions = get_menu_permissions()
     current_date = get_local_now().strftime('%Y-%m-%d')
     return render_template(
-        'relatorio.html',
+        'marcacoes.html',
         is_admin=session.get('is_admin'),
         locations=locations,
         permissions=permissions,

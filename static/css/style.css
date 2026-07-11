@@ -10,6 +10,7 @@
     --white: #FFFFFF;
     --error-red: #EF4444;
     --warning-yellow: #F59E0B;
+    --accent-color: #3269D9;
 }
 
 body {
@@ -115,13 +116,29 @@ h3 {
 .navbar {
     background-color: var(--dark-bg);
     color: var(--white);
-    padding: 15px 0;
+    padding: 0;
 }
 
-.navbar .container {
+.navbar-top {
+    background-color: #0a0d14; /* Tom mais escuro para contraste */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 12px 0;
+}
+
+.navbar-bottom {
+    background-color: var(--dark-bg);
+    padding: 12px 0;
+}
+
+.navbar-top .container,
+.navbar-bottom .container {
     display: flex;
     justify-content: space-between;
     align-items: center;
+}
+
+.navbar-bottom .container {
+    justify-content: center;
 }
 
 .navbar-brand {
@@ -131,10 +148,34 @@ h3 {
     text-decoration: none;
 }
 
+.nav-user {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.nav-user span {
+    color: var(--white);
+}
+
+.nav-user a {
+    color: var(--white);
+    text-decoration: none;
+}
+
+.nav-links {
+    display: flex;
+    align-items: center;
+    gap: 25px;
+}
+
 .nav-links a {
     color: var(--white);
     text-decoration: none;
-    margin-left: 20px;
+    padding-bottom: 4px;
+    border-bottom: 2px solid transparent;
+    vertical-align: middle;
+    display: inline-block;
 }
 
 .card {
@@ -292,9 +333,11 @@ tr:hover {
     font-family: inherit;
     cursor: pointer;
     font-weight: normal;
-    padding: 0;
-    margin-left: 20px;
-    height: 100%;
+    padding: 0 0 4px 0;
+    margin-left: 0;
+    border-bottom: 2px solid transparent;
+    vertical-align: middle;
+    display: inline-block;
 }
 
 .dropdown .dropbtn:hover {
