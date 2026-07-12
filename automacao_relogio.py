@@ -233,4 +233,4 @@ def run_relogio_automation(tipo, data_personalizada=None, relogio_ids=None):
                 p.stop()
             except:
                 pass
-        yield "🔒 Navegador encerrado.\n"
+        print("🔒 Navegador encerrado.")

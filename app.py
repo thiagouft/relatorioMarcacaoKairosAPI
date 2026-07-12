@@ -33,7 +33,7 @@ app = Flask(__name__)
 app.config.from_object(Config)
 
 # Tempo limite para requisições à API externa do Kairos
-TIMEOUT = 15
+TIMEOUT = 60
 
 # Database Setup
 engine = create_engine(app.config['SQLALCHEMY_DATABASE_URI'])

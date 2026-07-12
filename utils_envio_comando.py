@@ -6,7 +6,7 @@ import datetime
 from config import Config, get_local_now
 
 # Tempo limite para requisições à API do Kairos (em segundos)
-TIMEOUT = 15
+TIMEOUT = 60
 
 def fetch_cracha(cracha):
     url = "https://www.dimepkairos.com.br/RestServiceApi/People/SearchPerson"
