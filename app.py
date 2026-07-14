@@ -473,13 +473,12 @@ CLOCK_GROUPS = {
   "OFICINA II": [8],
   "PIPE SAO FELIX": [2, 4, 10, 19, 21, 28],
   "TREINAMENTO": [16],
-  "RH": [13],
+  "MUTRAN CANTEIRO IV": [13, 17],
   "TERRAPLENAGEM III": [6, 12],
   "TENDA MOTORISTAS III": [26],
   "NAUTICA": [30],
   "PI SAO FELIX": [35,36],
   "CENTRAL DE CONCRETO III": [7, 15],
-  "DOMINGO": [17, 27],
 }
 
 def get_location_by_clock_id(clock_id):
@@ -1136,11 +1135,13 @@ def api_envio_comando_por_local():
             falha_file_name = log_file_name
 
         if crachas_sucesso:
+            # Mapeia IDs de banco de dados/URL (35, 36) para os números de relógio reais da API (33, 34)
+            mapped_clock_ids = [33 if cid == 35 else 34 if cid == 36 else cid for cid in clock_ids]
             cracha_list = [c.get('cracha') for c in crachas_sucesso]
-            schedule_result = schedule_commands(cracha_list, config_options, clock_ids)
+            schedule_result = schedule_commands(cracha_list, config_options, mapped_clock_ids)
 
             if schedule_result.get('sucesso'):
-                cabecalho = generate_cabecalho_arquivo(clock_ids, config_options)
+                cabecalho = generate_cabecalho_arquivo(mapped_clock_ids, config_options)
                 sucesso_file_name = f'sucesso_inclusao_{location.replace(" ", "_")}.pdf'
                 sucesso_content = [f"Crachá: {c.get('cracha')}, Nome: {c.get('nome')}" for c in crachas_sucesso]
                 generate_pdf_report(os.path.join(app.root_path, 'static', sucesso_file_name), cabecalho, sucesso_content)

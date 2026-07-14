@@ -124,8 +124,10 @@
                         <label for="dataPonteiro">Data da Reposição:</label>
                         <input type="date" id="dataPonteiro" name="data" required />
                     </div>
-                    <button type="submit" class="btn btn-primary" style="margin-top: 1rem; width: 100%;">Iniciar Reposição de Ponteiro</button>
-                    <button type="button" id="cancelPonteiro" class="btn btn-danger" style="margin-top: 0.5rem; width: 100%; display: none;">Cancelar Operação</button>
+                    <button type="submit" class="btn btn-primary" style="margin-top: 1rem; width: 100%;">Iniciar
+                        Reposição de Ponteiro</button>
+                    <button type="button" id="cancelPonteiro" class="btn btn-danger"
+                        style="margin-top: 0.5rem; width: 100%; display: none;">Cancelar Operação</button>
                 </form>
 
                 <!-- Console de Logs (Terminal) -->
@@ -142,8 +144,10 @@
                     Este comando enviará a data e a hora atual do servidor para todos os relógios de ponto selecionados.
                 </p>
                 <form id="datahoraForm">
-                    <button type="submit" class="btn btn-primary" style="width: 100%;">Iniciar Envio de Data e Hora</button>
-                    <button type="button" id="cancelDataHora" class="btn btn-danger" style="margin-top: 0.5rem; width: 100%; display: none;">Cancelar Operação</button>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Iniciar Envio de Data e
+                        Hora</button>
+                    <button type="button" id="cancelDataHora" class="btn btn-danger"
+                        style="margin-top: 0.5rem; width: 100%; display: none;">Cancelar Operação</button>
                 </form>
 
                 <!-- Console de Logs (Terminal) -->
@@ -166,20 +170,19 @@
     <!-- Pass grouping definition to frontend via global window variable -->
     <script>
         window.gruposRelogios = {
-            "P10": [1, 11, 23,29],
+            "P10": [1, 11, 23, 29],
             "COCA": [3, 14, 31],
             "CANTEIRO III": [18, 22, 24, 25],
             "PIPE MARABA": [5, 9, 20],
             "OFICINA II": [8],
             "PIPE SAO FELIX": [2, 4, 10, 19, 21, 28],
             "TREINAMENTO": [16],
-            "RH": [13],
+            "MUTRAN CANTEIRO IV": [13, 17],
             "TERRAPLENAGEM III": [6, 12],
             "TENDA MOTORISTAS III": [26],
             "NAUTICA": [30],
-            "PI SAO FELIX": [33,34],
-            "CENTRAL DE CONCRETO III": [7, 15],
-            "DOMINGO": [17, 27],
+            "PI SAO FELIX": [33, 34],
+            "CENTRAL DE CONCRETO III": [7, 15]
         };
     </script>
     <script src="{{ url_for('static', filename='js/envio_comando.js') }}"></script>
