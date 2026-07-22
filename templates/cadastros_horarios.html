@@ -24,7 +24,7 @@
             <h2 style="color: var(--primary-blue); margin-bottom: 20px;">Cadastro de Horários</h2>
 
             <!-- Search Form -->
-            <form method="GET" action="{{ url_for('cadastros_horarios') }}" style="display: flex; gap: 10px; margin-bottom: 20px;">
+            <form method="GET" action="{{ url_for('cadastros_horarios') }}" class="search-form">
                 <input type="text" name="search" class="form-control" placeholder="Pesquisar por Código ou Descrição de Horário..." value="{{ search }}" style="flex: 1;">
                 <button type="submit" class="btn btn-primary" style="width: auto;">Buscar</button>
                 {% if search %}

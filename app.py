@@ -107,7 +107,9 @@ def login():
                     'admin_locais_ponto': False,
                     'envio_comando': False,
                     'hora_extra_acumulada': False,
-                    'cadastros': False
+                    'cadastros': False,
+                    'intersticio': False,
+                    'exportar_csv': False
                 })
                 db.commit()
             session['user_id'] = user.id
@@ -178,7 +180,9 @@ def get_menu_permissions():
             "admin_locais_ponto": True,
             "envio_comando": True,
             "hora_extra_acumulada": True,
-            "cadastros": True
+            "cadastros": True,
+            "intersticio": True,
+            "exportar_csv": True
         }
     db = get_db_session()
     user = db.query(User).get(session.get('user_id'))
@@ -259,7 +263,9 @@ def update_permissions(user_id):
         'admin_locais_ponto': 'admin_locais_ponto' in request.form,
         'envio_comando': 'envio_comando' in request.form,
         'hora_extra_acumulada': 'hora_extra_acumulada' in request.form,
-        'cadastros': 'cadastros' in request.form
+        'cadastros': 'cadastros' in request.form,
+        'intersticio': 'intersticio' in request.form,
+        'exportar_csv': 'exportar_csv' in request.form
     }
     is_admin = 'is_admin' in request.form
     db = get_db_session()
@@ -334,6 +340,21 @@ def hora_extra_acumulada():
     log_action('Acessou menu de Hora Extra Acumulada')
     return render_template('hora_extra_acumulada.html', is_admin=session.get('is_admin'), permissions=permissions)
 
+@app.route('/exportar_csv')
+@permission_required('exportar_csv')
+def exportar_csv():
+    log_action('Acessou menu de Exportação CSV')
+    locations = sorted(CLOCK_GROUPS.keys())
+    permissions = get_menu_permissions()
+    current_date = get_local_now().strftime('%Y-%m-%d')
+    return render_template(
+        'exportar_csv.html',
+        is_admin=session.get('is_admin'),
+        locations=locations,
+        permissions=permissions,
+        current_date=current_date
+    )
+
 @app.route('/processar_hora_extra', methods=['POST'])
 @login_required
 def processar_hora_extra():
@@ -395,6 +416,192 @@ def processar_hora_extra():
         log_action(f'Erro ao processar Hora Extra Acumulada: {str(e)}')
         flash(f'Erro ao processar arquivo: {str(e)}', 'danger')
         return redirect(url_for('hora_extra_acumulada'))
+
+@app.route('/intersticio')
+@login_required
+@permission_required('intersticio')
+def intersticio():
+    log_action('Acessou menu de Apuração de Interstício')
+    permissions = get_menu_permissions()
+    current_date = get_local_now().strftime('%Y-%m-%d')
+    return render_template(
+        'intersticio.html',
+        is_admin=session.get('is_admin'),
+        permissions=permissions,
+        current_date=current_date
+    )
+
+@app.route('/api/intersticio', methods=['POST'])
+@login_required
+@permission_required('intersticio')
+def api_intersticio():
+    data = request.json
+    selected_date = data.get('date') # Expected in 'YYYY-MM-DD'
+    turno = data.get('turno') # 'A' or 'B'
+
+    if not selected_date or not turno:
+        return jsonify({'error': 'Data e Turno são obrigatórios'}), 400
+
+    # Parse and format date to DD-MM-YYYY for Kairos API
+    try:
+        if '-' in selected_date:
+            parts = selected_date.split('-')
+            if len(parts[0]) == 4: # yyyy-mm-dd
+                dt = datetime.datetime.strptime(selected_date, "%Y-%m-%d")
+            else: # dd-mm-yyyy
+                dt = datetime.datetime.strptime(selected_date, "%d-%m-%Y")
+        elif '/' in selected_date:
+            parts = selected_date.split('/')
+            if len(parts[0]) == 4: # yyyy/mm/dd
+                dt = datetime.datetime.strptime(selected_date, "%Y/%m/%d")
+            else: # dd/mm/yyyy
+                dt = datetime.datetime.strptime(selected_date, "%d/%m/%Y")
+        else:
+            raise ValueError()
+    except ValueError:
+        return jsonify({'error': 'Formato de data inválido'}), 400
+
+    formatted_date = dt.strftime("%d-%m-%Y")
+    day_of_week = dt.weekday() # 0 = Monday, 6 = Sunday
+
+    # Determine database schedule filter code
+    target_horario_codigo = '3001900002' if turno == 'A' else '3001900037'
+
+    db = get_db_session()
+    try:
+        # Get employees of selected shift
+        employees = db.query(Pessoa).filter_by(horario_codigo=target_horario_codigo).all()
+        if not employees:
+            return jsonify({'data': []}) # No employees in this shift
+
+        # Create maps for quick lookup
+        employees_map = {}
+        for p in employees:
+            if p.chapa:
+                employees_map[p.chapa.strip()] = p
+                try:
+                    employees_map[str(int(p.chapa))] = p
+                except ValueError:
+                    pass
+
+        # Load full employee list from Kairos search people API for translation
+        employees_info = fetch_all_employees_map()
+
+        # Fetch appointments from Kairos API.
+        # We'll fetch all records for the chosen day in batches/pages.
+        all_records = []
+        page = 1
+        total_pages = 1
+        
+        while page <= total_pages:
+            payload = {
+                "DataInicio": formatted_date,
+                "DataFim": formatted_date,
+                "CalculoNaoAtualizado": "true",
+                "Pagina": page,
+                "ResponseType": "AS400V1",
+                "IdsPessoa": [0] # Fetch for all
+            }
+            
+            response = requests.post(
+                app.config['KAIROS_API_URL'],
+                json=payload,
+                headers=app.config['KAIROS_HEADERS'],
+                timeout=TIMEOUT
+            )
+            
+            if response.status_code != 200:
+                return jsonify({'error': 'Erro ao consultar API Kairos'}), 500
+                
+            resp_json = response.json()
+            if not resp_json.get('Sucesso'):
+                 return jsonify({'error': resp_json.get('Mensagem', 'Erro desconhecido na API')}), 500
+            
+            if 'Obj' in resp_json:
+                all_records.extend(resp_json['Obj'])
+            
+            total_pages = resp_json.get('TotalPagina', 1)
+            page += 1
+
+        # We also need to map the sections and gerencias
+        secoes_map = {s.codigo: s.descricao for s in db.query(Secao).all()}
+        gerencias_map = {}
+        links = db.query(GerenciaSecao).all()
+        gerencias = {g.id: g.nome for g in db.query(Gerencia).all()}
+        for link in links:
+            gerencias_map[link.secao_codigo] = gerencias.get(link.gerencia_id, '')
+
+        # Group punches by employee (translated to DB chapa/cracha format)
+        employee_punches = {}
+        for r in all_records:
+            mat = str(r.get('Matricula'))
+            
+            # Translate Kairos Matricula to DB Chapa/Cracha if possible
+            emp_data = employees_info.get(mat, {})
+            cracha = emp_data.get('Cracha')
+            db_chapa = str(cracha).strip() if cracha is not None else mat
+            
+            if db_chapa in employees_map:
+                if db_chapa not in employee_punches:
+                    employee_punches[db_chapa] = []
+                employee_punches[db_chapa].append(r)
+
+        processed_data = []
+        
+        # Now, for each employee, check their latest punch
+        for db_chapa, punches in employee_punches.items():
+            # Sort punches chronologically to get the last one
+            punches.sort(key=lambda x: (x.get('Hora', 0), x.get('Minuto', 0)))
+            last_punch = punches[-1]
+            
+            p_hour = last_punch.get('Hora', 0)
+            p_minute = last_punch.get('Minuto', 0)
+            
+            # Check if threshold is exceeded
+            exceeded = False
+            if turno == 'A':
+                # Turno A threshold is 19:50
+                if p_hour > 19 or (p_hour == 19 and p_minute >= 50):
+                    exceeded = True
+            else:
+                # Turno B:
+                # Monday to Thursday (weekday index 0 to 3): >= 05:50
+                # Friday, Saturday, Sunday (weekday index 4 to 6): >= 04:50
+                if day_of_week in [0, 1, 2, 3]: # Monday to Thursday
+                    if p_hour > 5 or (p_hour == 5 and p_minute >= 50):
+                        exceeded = True
+                else: # Friday, Saturday, Sunday
+                    if p_hour > 4 or (p_hour == 4 and p_minute >= 50):
+                        exceeded = True
+                        
+            if exceeded:
+                p = employees_map[db_chapa]
+                relogio_id = last_punch.get('RelogioID')
+                local = get_location_by_clock_id(relogio_id)
+                
+                processed_data.append({
+                    "Matricula": p.chapa,
+                    "Nome": p.nome,
+                    "DataFormatada": f"{last_punch.get('Dia'):02d}/{last_punch.get('Mes'):02d}/{last_punch.get('Ano')}",
+                    "HoraFormatada": f"{p_hour:02d}:{p_minute:02d}",
+                    "NomeFuncao": p.nome_funcao or "",
+                    "Secao": secoes_map.get(p.secao_codigo, "") if p.secao_codigo else "",
+                    "Gerencia": gerencias_map.get(p.secao_codigo, "") if p.secao_codigo else "",
+                    "Local": local
+                })
+
+        # Sort by HoraFormatada (Departure Time) ascending, then Name
+        processed_data.sort(key=lambda x: (x['HoraFormatada'], x['Nome']))
+        
+        log_action(f'Apurou interstício do Turno {turno} para data {formatted_date}')
+        return jsonify({'data': processed_data})
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+    finally:
+        db.close()
 
 @app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
 @permission_required('admin_users')
@@ -479,6 +686,7 @@ CLOCK_GROUPS = {
   "NAUTICA": [30],
   "PI SAO FELIX": [35,36],
   "CENTRAL DE CONCRETO III": [7, 15],
+  "STANDBY": [27, 32],
 }
 
 def get_location_by_clock_id(clock_id):
@@ -645,6 +853,210 @@ def get_appointments():
             
         log_action(f'Consultou apontamentos de {start_date} a {end_date}')
         return jsonify({'data': processed_data})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/exportar_csv_file', methods=['POST'])
+@permission_required('exportar_csv')
+def exportar_csv_file():
+    import csv
+    import io
+    
+    data = request.json
+    start_date = data.get('start_date')
+    end_date = data.get('end_date')
+    selected_location = data.get('local') # Get location filter
+
+    if not start_date or not end_date:
+        return jsonify({'error': 'Datas de início e fim são obrigatórias'}), 400
+        
+    # Validation
+    try:
+        # Prevent unconverted data remains by trimming the year part if it's too long
+        sd_parts = start_date.split('-')
+        if len(sd_parts) == 3 and len(sd_parts[2]) > 4:
+             sd_parts[2] = sd_parts[2][:4]
+             start_date = "-".join(sd_parts)
+
+        ed_parts = end_date.split('-')
+        if len(ed_parts) == 3 and len(ed_parts[2]) > 4:
+             ed_parts[2] = ed_parts[2][:4]
+             end_date = "-".join(ed_parts)
+
+        d1 = datetime.datetime.strptime(start_date, "%d-%m-%Y")
+        d2 = datetime.datetime.strptime(end_date, "%d-%m-%Y")
+        days_diff = abs((d2 - d1).days)
+    except ValueError as e:
+        return jsonify({'error': f'Formato de data inválido. Use o calendário.'}), 400
+
+    # 6 months (185 days) limit for any request
+    if days_diff > 185:
+         return jsonify({'error': 'O intervalo máximo para a exportação de CSV é de 6 meses (185 dias)'}), 400
+
+    all_records = []
+    
+    session_http = requests.Session()
+    from urllib3.util import Retry
+    from requests.adapters import HTTPAdapter
+    import time
+    
+    retries = Retry(
+        total=5,
+        backoff_factor=0.5,
+        status_forcelist=[500, 502, 503, 504],
+        raise_on_status=False
+    )
+    session_http.mount('http://', HTTPAdapter(max_retries=retries))
+    session_http.mount('https://', HTTPAdapter(max_retries=retries))
+    
+    current_start = d1
+    try:
+        while current_start <= d2:
+            current_end = min(current_start + datetime.timedelta(days=4), d2)
+            chunk_start_str = current_start.strftime("%d-%m-%Y")
+            chunk_end_str = current_end.strftime("%d-%m-%Y")
+            
+            page = 1
+            total_pages = 1
+            while page <= total_pages:
+                payload = {
+                    "DataInicio": chunk_start_str,
+                    "DataFim": chunk_end_str,
+                    "CalculoNaoAtualizado": "true",
+                    "Pagina": page,
+                    "ResponseType": "AS400V1"
+                }
+                
+                matricula = data.get('matricula')
+                if matricula and matricula.strip():
+                    try:
+                        payload["CrachasPessoa"] = [int(matricula)]
+                    except ValueError:
+                        return jsonify({'error': 'Matrícula deve ser um número'}), 400
+                else:
+                    payload["IdsPessoa"] = [0]
+                
+                response = session_http.post(
+                    app.config['KAIROS_API_URL'],
+                    json=payload,
+                    headers=app.config['KAIROS_HEADERS'],
+                    timeout=TIMEOUT
+                )
+                
+                if response.status_code != 200:
+                    return jsonify({'error': f'Erro ao consultar API Kairos para o período {chunk_start_str} a {chunk_end_str}'}), 500
+                    
+                resp_json = response.json()
+                
+                if not resp_json.get('Sucesso'):
+                     return jsonify({'error': resp_json.get('Mensagem', 'Erro desconhecido na API')}), 500
+                
+                if 'Obj' in resp_json:
+                    all_records.extend(resp_json['Obj'])
+                
+                total_pages = resp_json.get('TotalPagina', 1)
+                page += 1
+            
+            current_start = current_end + datetime.timedelta(days=1)
+            # Tiny sleep to avoid hammering the external API
+            time.sleep(0.2)
+            
+        # --- Fetch Employee Names & Cracha ---
+        employees_info = {}
+        
+        # If searching by specific matricula, fetch just that one
+        if matricula and matricula.strip():
+             try:
+                people_payload = {"Cracha": int(matricula)}
+                p_response = session_http.post(
+                    app.config['KAIROS_SEARCH_PEOPLE_URL'],
+                    json=people_payload,
+                    headers=app.config['KAIROS_HEADERS'],
+                    timeout=TIMEOUT
+                )
+                if p_response.status_code == 200:
+                    p_data = p_response.json()
+                    if p_data.get('Sucesso') and p_data.get('Obj'):
+                        person_obj = p_data['Obj'][0]
+                        found_name = person_obj.get('Nome', '')
+                        found_cracha = person_obj.get('Cracha', '')
+                        
+                        # Apply this name to all records found
+                        for r in all_records:
+                            r_mat = str(r.get('Matricula'))
+                            employees_info[r_mat] = {'Nome': found_name, 'Cracha': found_cracha}
+             except Exception as e:
+                print(f"Error fetching name for matricula {matricula}: {e}")
+        else:
+            # Bulk fetch all employees
+            employees_info = fetch_all_employees_map()
+                
+        # Process records for export
+        processed_data = []
+        for r in all_records:
+            mat = r.get('Matricula')
+            str_mat = str(mat)
+            
+            emp_data = employees_info.get(str_mat, {})
+            nome = emp_data.get('Nome', '')
+            display_matricula = emp_data.get('Cracha', mat)
+            
+            relogio_id = r.get('RelogioID')
+            local = get_location_by_clock_id(relogio_id)
+
+            # Apply location filter
+            if selected_location and selected_location.strip() and selected_location != 'Todos':
+                if local != selected_location:
+                    continue
+
+            processed_data.append({
+                "Matricula": display_matricula,
+                "Nome": nome,
+                "Local": local,
+                "RelogioID": relogio_id,
+                "NumeroSerieRep": r.get('NumeroSerieRep'),
+                "Dia": r.get('Dia'),
+                "Mes": r.get('Mes'),
+                "Ano": r.get('Ano'),
+                "Hora": r.get('Hora'),
+                "Minuto": r.get('Minuto'),
+                "DataFormatada": f"{r.get('Dia'):02d}/{r.get('Mes'):02d}/{r.get('Ano')}",
+                "HoraFormatada": f"{r.get('Hora'):02d}:{r.get('Minuto'):02d}"
+            })
+            
+        # Sort by Date and Time
+        processed_data.sort(key=lambda x: (x['Ano'], x['Mes'], x['Dia'], x['Hora'], x['Minuto']))
+            
+        log_action(f'Exportou apontamentos em CSV de {start_date} a {end_date}')
+        
+        # Generate CSV in memory
+        output = io.StringIO()
+        # Add BOM for excel compatibility in Windows/Brazil
+        output.write('\ufeff')
+        writer = csv.writer(output, delimiter=';')
+        
+        # Columns matching the ones generated in excel from Marcações
+        writer.writerow(["Matricula", "Nome", "Local", "RelogioID", "NumeroSerieRep", "DataFormatada", "HoraFormatada"])
+        
+        for r in processed_data:
+            writer.writerow([
+                r.get("Matricula", ""),
+                r.get("Nome", ""),
+                r.get("Local", ""),
+                r.get("RelogioID", ""),
+                r.get("NumeroSerieRep", ""),
+                r.get("DataFormatada", ""),
+                r.get("HoraFormatada", "")
+            ])
+            
+        csv_content = output.getvalue()
+        return send_file(
+            io.BytesIO(csv_content.encode('utf-8')),
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=f'relatorio_ponto_{start_date}_a_{end_date}.csv'
+        )
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1171,11 +1583,15 @@ def export_excel():
         
     df = pd.DataFrame(records)
     
-    # Select and rename columns if needed, or just dump everything
-    # Select and rename columns if needed, or just dump everything
-    # Based on requirement: "Matricula", "Nome", "Local", "RelogioID", "NumeroSerieRep", "DataFormatada", "HoraFormatada"
-    columns_order = ["Matricula", "Nome", "Local", "RelogioID", "NumeroSerieRep", "DataFormatada", "HoraFormatada"]
-    # Filter columns that actually exist in the data
+    # Check if records are for Interstício based on columns
+    is_intersticio = "Secao" in df.columns or "NomeFuncao" in df.columns or "Gerencia" in df.columns
+    if is_intersticio:
+        columns_order = ["Matricula", "Nome", "NomeFuncao", "Secao", "Gerencia", "Local", "DataFormatada", "HoraFormatada"]
+        download_filename = 'relatorio_intersticio.xlsx'
+    else:
+        columns_order = ["Matricula", "Nome", "Local", "RelogioID", "NumeroSerieRep", "DataFormatada", "HoraFormatada"]
+        download_filename = 'relatorio_ponto.xlsx'
+        
     existing_cols = [col for col in columns_order if col in df.columns]
     df = df[existing_cols]
     
@@ -1191,7 +1607,7 @@ def export_excel():
         output,
         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         as_attachment=True,
-        download_name='relatorio_ponto.xlsx'
+        download_name=download_filename
     )
 
 @app.route('/api/export-pdf', methods=['POST'])
@@ -1204,47 +1620,100 @@ def export_pdf():
         if not records:
             return jsonify({'error': 'Sem dados para exportar'}), 400
 
+        is_intersticio = any('Secao' in r or 'NomeFuncao' in r or 'Gerencia' in r for r in records)
+
         buffer = io.BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter))
+        doc = SimpleDocTemplate(
+            buffer, 
+            pagesize=landscape(letter),
+            leftMargin=36,
+            rightMargin=36,
+            topMargin=36,
+            bottomMargin=36
+        )
         elements = []
+        
+        # Styles
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         styles = getSampleStyleSheet()
+        
+        # Custom styles for cell wrapping
+        cell_style = ParagraphStyle(
+            'TableCellStyle',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=7.5,
+            leading=9,
+            alignment=1  # Center
+        )
+
+        header_cell_style = ParagraphStyle(
+            'TableHeaderCellStyle',
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold',
+            fontSize=8,
+            leading=10,
+            textColor=colors.whitesmoke,
+            alignment=1  # Center
+        )
 
         # Title
-        title = Paragraph("Relatório de Ponto", styles['Title'])
+        title_text = "Relatório de Apuração de Interstício" if is_intersticio else "Relatório de Ponto"
+        title = Paragraph(title_text, styles['Title'])
         elements.append(title)
         elements.append(Spacer(1, 12))
 
         # Table Data
-        # Header matches Excel export requirement: "Matricula", "Nome", "Local", "RelogioID", "NumeroSerieRep", "DataFormatada", "HoraFormatada"
-        headers = ["Matrícula", "Nome", "Local", "Relógio", "N. Série", "Data", "Hora"]
-        table_data = [headers]
-
-        for r in records:
-            row = [
-                str(r.get('Matricula', '')),
-                str(r.get('Nome', '')),
-                str(r.get('Local', '')),
-                str(r.get('RelogioID', '')),
-                str(r.get('NumeroSerieRep', '')),
-                str(r.get('DataFormatada', '')),
-                str(r.get('HoraFormatada', ''))
-            ]
-            table_data.append(row)
+        if is_intersticio:
+            headers = ["Matrícula", "Nome", "Cargo / Função", "Seção", "Gerência", "Local Registro", "Data Saída", "Hora Saída"]
+            header_row = [Paragraph(h, header_cell_style) for h in headers]
+            table_data = [header_row]
+            for r in records:
+                row = [
+                    Paragraph(str(r.get('Matricula') or ''), cell_style),
+                    Paragraph(str(r.get('Nome') or ''), cell_style),
+                    Paragraph(str(r.get('NomeFuncao') or ''), cell_style),
+                    Paragraph(str(r.get('Secao') or ''), cell_style),
+                    Paragraph(str(r.get('Gerencia') or ''), cell_style),
+                    Paragraph(str(r.get('Local') or ''), cell_style),
+                    Paragraph(str(r.get('DataFormatada') or ''), cell_style),
+                    Paragraph(str(r.get('HoraFormatada') or ''), cell_style)
+                ]
+                table_data.append(row)
+            col_widths = [65, 110, 110, 120, 110, 85, 60, 60] # Total: 720
+            download_filename = 'relatorio_intersticio.pdf'
+        else:
+            headers = ["Matrícula", "Nome", "Local", "Relógio", "N. Série", "Data", "Hora"]
+            header_row = [Paragraph(h, header_cell_style) for h in headers]
+            table_data = [header_row]
+            for r in records:
+                row = [
+                    Paragraph(str(r.get('Matricula') or ''), cell_style),
+                    Paragraph(str(r.get('Nome') or ''), cell_style),
+                    Paragraph(str(r.get('Local') or ''), cell_style),
+                    Paragraph(str(r.get('RelogioID') or ''), cell_style),
+                    Paragraph(str(r.get('NumeroSerieRep') or ''), cell_style),
+                    Paragraph(str(r.get('DataFormatada') or ''), cell_style),
+                    Paragraph(str(r.get('HoraFormatada') or ''), cell_style)
+                ]
+                table_data.append(row)
+            col_widths = [70, 160, 130, 60, 140, 80, 80] # Total: 720
+            download_filename = 'relatorio_ponto.pdf'
 
         # Create Table
-        t = Table(table_data)
+        t = Table(table_data, colWidths=col_widths)
         
         # Style
         style = TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black),
-            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('TOPPADDING', (0, 0), (-1, 0), 8),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+            ('TOPPADDING', (0, 1), (-1, -1), 6),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.beige]),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.lightgrey),
         ])
         t.setStyle(style)
         
@@ -1259,7 +1728,7 @@ def export_pdf():
             buffer,
             mimetype='application/pdf',
             as_attachment=True,
-            download_name='relatorio_ponto.pdf'
+            download_name=download_filename
         )
 
     except Exception as e:

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exportação CSV - Kairos CPRT</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        .info-card {
+            background-color: #EBF5FF;
+            color: #1E429F;
+            border: 1px solid #C3DDFD;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+        
+        .loading-container {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border-left-color: var(--primary-blue);
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .loading-text {
+            font-weight: 600;
+            color: var(--text-gray);
+        }
+    </style>
+</head>
+
+<body>
+    {% set active_page = 'exportar_csv' %}
+    {% include 'navbar.html' %}
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <div class="info-card">
+            <strong>Informação:</strong> Este menu permite exportar as marcações de ponto diretamente em formato CSV. 
+            O limite máximo do filtro é de <strong>6 meses (185 dias)</strong>.
+        </div>
+
+        <!-- Filters Section -->
+        <div class="card">
+            <h3>Filtros de Exportação</h3>
+            <div class="filters">
+                <div class="filter-group">
+                    <label for="start_date">Data Início</label>
+                    <input type="date" id="start_date" class="form-control" max="2099-12-31" min="2000-01-01" value="{{ current_date }}">
+                </div>
+                <div class="filter-group">
+                    <label for="end_date">Data Fim</label>
+                    <input type="date" id="end_date" class="form-control" max="2099-12-31" min="2000-01-01" value="{{ current_date }}">
+                </div>
+                <div class="filter-group">
+                    <label for="local">Local</label>
+                    <select id="local" class="form-control">
+                        <option value="Todos">Todos</option>
+                        {% for loc in locations %}
+                        <option value="{{ loc }}">{{ loc }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="matricula">Matrícula (Opcional)</label>
+                    <input type="text" id="matricula" class="form-control" placeholder="Todas">
+                </div>
+                <button id="btn-export-csv" class="btn btn-success" style="width: auto;">Exportar CSV</button>
+            </div>
+            
+            <div id="error-msg" class="alert alert-danger" style="display: none; margin-top: 15px;"></div>
+            
+            <!-- Loading Indicator -->
+            <div class="loading-container" id="loading-indicator">
+                <div class="spinner"></div>
+                <div class="loading-text">Buscando marcações na API Kairos e gerando o arquivo CSV...</div>
+                <div style="font-size: 0.85rem; color: var(--text-gray); margin-top: 5px;">Por favor, aguarde. Esta operação pode levar alguns instantes dependendo do período selecionado.</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('btn-export-csv').addEventListener('click', async () => {
+            const startDateInput = document.getElementById('start_date').value;
+            const endDateInput = document.getElementById('end_date').value;
+            const matriculaInput = document.getElementById('matricula').value;
+            const localInput = document.getElementById('local').value;
+            const errorMsg = document.getElementById('error-msg');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            const btnExport = document.getElementById('btn-export-csv');
+
+            errorMsg.style.display = 'none';
+
+            if (!startDateInput || !endDateInput) {
+                errorMsg.textContent = 'Por favor, selecione as datas de início e fim.';
+                errorMsg.style.display = 'block';
+                return;
+            }
+
+            // Date validation (max 185 days)
+            const d1 = new Date(startDateInput);
+            const d2 = new Date(endDateInput);
+            const timeDiff = Math.abs(d2.getTime() - d1.getTime());
+            const diffDays = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+            if (diffDays > 185) {
+                errorMsg.textContent = 'O intervalo máximo para a exportação de CSV é de 6 meses (185 dias). Selecionado: ' + diffDays + ' dias.';
+                errorMsg.style.display = 'block';
+                return;
+            }
+
+            // Format dates to DD-MM-YYYY for API
+            const formatDate = (dateStr) => {
+                let [y, m, d] = dateStr.split('-');
+                if (y.length > 4) {
+                    y = y.substring(0, 4);
+                }
+                return `${d}-${m}-${y}`;
+            };
+
+            const payload = {
+                start_date: formatDate(startDateInput),
+                end_date: formatDate(endDateInput),
+                matricula: matriculaInput,
+                local: localInput
+            };
+
+            // Show loading and disable buttons
+            loadingIndicator.style.display = 'flex';
+            btnExport.disabled = true;
+
+            try {
+                const response = await fetch('/api/exportar_csv_file', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    
+                    // Format file name with dates
+                    const filename = `relatorio_ponto_${startDateInput}_a_${endDateInput}.csv`;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                } else {
+                    const result = await response.json();
+                    throw new Error(result.error || 'Erro na geração do CSV');
+                }
+            } catch (error) {
+                errorMsg.textContent = error.message;
+                errorMsg.style.display = 'block';
+            } finally {
+                loadingIndicator.style.display = 'none';
+                btnExport.disabled = false;
+            }
+        });
+    </script>
+    
+    <footer class="footer">
+        <div class="container footer-content">
+            <img src="{{ url_for('static', filename='images/mixestec_logo.png') }}" alt="Mixestec Logo"
+                class="footer-logo">
+            <p>Desenvolvido por Thiago Silva Pereira</p>
+        </div>
+    </footer>
+</body>
+
+</html>

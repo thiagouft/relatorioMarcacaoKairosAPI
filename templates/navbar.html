@@ -6,6 +6,12 @@
                 <span>Olá, <span style="text-transform: capitalize;">{{ session.get('username', 'Admin') }}</span></span>
                 <a href="{{ url_for('logout') }}">Sair</a>
             </div>
+            <!-- Mobile Menu Toggle Button -->
+            <button class="menu-toggle" id="menuToggle" aria-label="Toggle navigation">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
         </div>
     </div>
     <div class="navbar-bottom">
@@ -46,17 +52,27 @@
                 {% endif %}
 
                 <!-- 3. Ferramentas -->
-                {% if is_admin or permissions.hora_extra_acumulada %}
+                {% if is_admin or permissions.hora_extra_acumulada or permissions.exportar_csv %}
                 <div class="dropdown">
-                    <button class="dropbtn" {% if active_page == 'hora_extra_acumulada' %}style="font-weight: bold; border-bottom: 2px solid var(--accent-color);"{% endif %}>Ferramentas</button>
+                    <button class="dropbtn" {% if active_page in ['hora_extra_acumulada', 'exportar_csv'] %}style="font-weight: bold; border-bottom: 2px solid var(--accent-color);"{% endif %}>Ferramentas</button>
                     <div class="dropdown-content">
+                        {% if is_admin or permissions.hora_extra_acumulada %}
                         <a href="{{ url_for('hora_extra_acumulada') }}">Hora Extra Acumulada</a>
+                        {% endif %}
+                        {% if is_admin or permissions.exportar_csv %}
+                        <a href="{{ url_for('exportar_csv') }}">Exportação CSV</a>
+                        {% endif %}
                     </div>
                 </div>
                 {% endif %}
 
                 <!-- 4. Marcações -->
                 <a href="{{ url_for('marcacoes') }}" {% if active_page == 'marcacoes' %}style="font-weight: bold; border-bottom: 2px solid var(--accent-color);"{% endif %}>Marcações</a>
+
+                <!-- Interstício -->
+                {% if is_admin or permissions.intersticio %}
+                <a href="{{ url_for('intersticio') }}" {% if active_page == 'intersticio' %}style="font-weight: bold; border-bottom: 2px solid var(--accent-color);"{% endif %}>Interstício</a>
+                {% endif %}
 
                 <!-- 5. Definições (dropdown com Usuários) -->
                 {% if is_admin or permissions.admin_users %}
@@ -67,7 +83,64 @@
                     </div>
                 </div>
                 {% endif %}
+                
+                <!-- Info do usuário no menu mobile -->
+                <div class="nav-user-mobile">
+                    <span>Olá, <span style="text-transform: capitalize;">{{ session.get('username', 'Admin') }}</span></span>
+                    <a href="{{ url_for('logout') }}" class="btn-logout-mobile">Sair</a>
+                </div>
             </div>
         </div>
     </div>
 </nav>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const menuToggle = document.getElementById('menuToggle');
+    const navbarBottom = document.querySelector('.navbar-bottom');
+    
+    if (menuToggle && navbarBottom) {
+        menuToggle.addEventListener('click', function(e) {
+            e.stopPropagation();
+            menuToggle.classList.toggle('active');
+            navbarBottom.classList.toggle('active');
+        });
+    }
+
+    // Toggle dropdowns on mobile click
+    const dropbtns = document.querySelectorAll('.dropdown .dropbtn');
+    dropbtns.forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            if (window.innerWidth <= 768) {
+                e.preventDefault();
+                e.stopPropagation();
+                const parent = btn.parentElement;
+                
+                // Toggle active class on clicked dropdown
+                parent.classList.toggle('active');
+                
+                // Close other dropdowns
+                document.querySelectorAll('.dropdown').forEach(dropdown => {
+                    if (dropdown !== parent) {
+                        dropdown.classList.remove('active');
+                    }
+                });
+            }
+        });
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener('click', function(e) {
+        if (window.innerWidth <= 768) {
+            const navbar = document.querySelector('.navbar');
+            if (navbar && !navbar.contains(e.target)) {
+                if (menuToggle) menuToggle.classList.remove('active');
+                if (navbarBottom) navbarBottom.classList.remove('active');
+                document.querySelectorAll('.dropdown').forEach(dropdown => {
+                    dropdown.classList.remove('active');
+                });
+            }
+        }
+    });
+});
+</script>

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apuração de Interstício - Kairos CPRT</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    {% set active_page = 'intersticio' %}
+    {% include 'navbar.html' %}
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <!-- Filtros -->
+        <div class="card">
+            <h3>Apuração de Interstício</h3>
+            <p style="color: var(--text-gray); margin-top: -10px; margin-bottom: 20px;">
+                Identifique funcionários com saída tardia que possam comprometer o intervalo mínimo de descanso (interstício).
+            </p>
+            <div class="filters">
+                <div class="filter-group">
+                    <label for="date">Data de Apuração</label>
+                    <input type="date" id="date" class="form-control" max="2099-12-31" min="2000-01-01" value="{{ current_date }}">
+                </div>
+                <div class="filter-group">
+                    <label for="turno">Turno / Horário</label>
+                    <select id="turno" class="form-control">
+                        <option value="A">Turno A (3001900002) - Saídas a partir de 19:50</option>
+                        <option value="B">Turno B (3001900037) - Saídas a partir de 05:50 (Seg-Qui) / 04:50 (Sex-Dom)</option>
+                    </select>
+                </div>
+                <div>
+                    <button id="btn-calculate" class="btn btn-primary">Apurar</button>
+                </div>
+            </div>
+            <div id="error-msg" class="alert alert-danger" style="display: none; margin-top: 15px;"></div>
+        </div>
+
+        <!-- Resultados -->
+        <div class="card" id="results-card" style="display: none;">
+            <div class="card-header">
+                <div style="display: flex; flex-direction: column; gap: 5px;">
+                    <h3>Pessoas com Saída Tardia</h3>
+                    <span id="results-count" class="badge" style="background-color: var(--primary-blue); color: white; padding: 5px 10px; border-radius: 4px; font-size: 0.9em; font-weight: 600; text-align: center; width: fit-content;">0 registros</span>
+                </div>
+                <div style="display: flex; gap: 10px; width: 100%; max-width: 320px;">
+                    <button id="btn-export" class="btn btn-success" style="flex: 1;">Exportar Excel</button>
+                    <button id="btn-export-pdf" class="btn btn-danger" style="flex: 1;">Exportar PDF</button>
+                </div>
+            </div>
+
+            <div class="loading" id="loading" style="display: none; text-align: center; padding: 20px; color: var(--text-gray);">Carregando dados da API Kairos...</div>
+            
+            <div class="table-container" id="table-container">
+                <table id="data-table">
+                    <thead>
+                        <tr>
+                            <th>Matrícula</th>
+                            <th>Nome</th>
+                            <th>Cargo / Função</th>
+                            <th>Seção</th>
+                            <th>Gerência</th>
+                            <th>Local Registro</th>
+                            <th>Data Saída</th>
+                            <th>Hora Saída</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Data dynamically loaded -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentData = [];
+
+        document.getElementById('btn-calculate').addEventListener('click', async () => {
+            const dateInput = document.getElementById('date').value;
+            const turnoInput = document.getElementById('turno').value;
+            const errorMsg = document.getElementById('error-msg');
+            const loading = document.getElementById('loading');
+            const resultsCard = document.getElementById('results-card');
+            const tableContainer = document.getElementById('table-container');
+            const resultsCount = document.getElementById('results-count');
+            const tbody = document.querySelector('#data-table tbody');
+
+            errorMsg.style.display = 'none';
+            tbody.innerHTML = '';
+            tableContainer.style.display = 'none';
+            currentData = [];
+
+            if (!dateInput) {
+                errorMsg.textContent = 'Por favor, selecione uma data para apuração.';
+                errorMsg.style.display = 'block';
+                return;
+            }
+
+            loading.style.display = 'block';
+            resultsCard.style.display = 'block';
+
+            try {
+                const response = await fetch('/api/intersticio', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        date: dateInput,
+                        turno: turnoInput
+                    })
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || 'Erro ao realizar a apuração.');
+                }
+
+                currentData = result.data || [];
+                resultsCount.textContent = `${currentData.length} ${currentData.length === 1 ? 'registro encontrado' : 'registros encontrados'}`;
+
+                if (currentData.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-gray); padding: 20px;">Nenhum funcionário ultrapassou o horário limite de saída nesta data.</td></tr>';
+                } else {
+                    currentData.forEach(item => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td><strong>${item.Matricula}</strong></td>
+                            <td style="text-transform: capitalize;">${item.Nome}</td>
+                            <td>${item.NomeFuncao || '<span style="color: var(--text-gray); font-style: italic;">Não informado</span>'}</td>
+                            <td>${item.Secao || '<span style="color: var(--text-gray); font-style: italic;">Não informado</span>'}</td>
+                            <td>${item.Gerencia || '<span style="color: var(--text-gray); font-style: italic;">Não informado</span>'}</td>
+                            <td>${item.Local || '<span style="color: var(--text-gray); font-style: italic;">-</span>'}</td>
+                            <td>${item.DataFormatada}</td>
+                            <td><span style="color: var(--error-red); font-weight: 600;">${item.HoraFormatada}</span></td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+                tableContainer.style.display = 'block';
+
+            } catch (error) {
+                errorMsg.textContent = error.message;
+                errorMsg.style.display = 'block';
+                resultsCard.style.display = 'none';
+            } finally {
+                loading.style.display = 'none';
+            }
+        });
+
+        document.getElementById('btn-export').addEventListener('click', async () => {
+            if (currentData.length === 0) {
+                alert('Sem dados para exportar.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ records: currentData })
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'relatorio_intersticio.xlsx';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                } else {
+                    alert('Erro ao exportar arquivo.');
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                alert('Erro ao exportar arquivo.');
+            }
+        });
+
+        document.getElementById('btn-export-pdf').addEventListener('click', async () => {
+            if (currentData.length === 0) {
+                alert('Sem dados para exportar.');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/export-pdf', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ records: currentData })
+                });
+
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'relatorio_intersticio.pdf';
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                } else {
+                    alert('Erro ao exportar PDF.');
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                alert('Erro ao exportar PDF.');
+            }
+        });
+    </script>
+</body>
+</html>

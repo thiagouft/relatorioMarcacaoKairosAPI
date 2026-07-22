@@ -21,13 +21,13 @@
         {% endwith %}
 
         <div class="card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div class="card-header">
                 <h2 style="color: var(--primary-blue); margin: 0;">Cadastro de Pessoas</h2>
                 <a href="{{ url_for('cadastros_importar') }}" class="btn btn-success" style="width: auto;">+ Importar Efetivo (.xls)</a>
             </div>
 
             <!-- Search Form -->
-            <form method="GET" action="{{ url_for('cadastros_pessoas') }}" style="display: flex; gap: 10px; margin-bottom: 20px;">
+            <form method="GET" action="{{ url_for('cadastros_pessoas') }}" class="search-form">
                 <input type="text" name="search" class="form-control" placeholder="Pesquisar por Chapa ou Nome..." value="{{ search }}" style="flex: 1;">
                 <button type="submit" class="btn btn-primary" style="width: auto;">Buscar</button>
                 {% if search %}

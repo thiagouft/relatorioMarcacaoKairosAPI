@@ -13,12 +13,12 @@
 
     <div class="container">
         <div class="card" style="margin-bottom: 30px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--primary-blue); padding-bottom: 10px; margin-bottom: 20px;">
+            <div class="card-header" style="border-bottom: 2px solid var(--primary-blue); padding-bottom: 10px;">
                 <h2 style="color: var(--primary-blue); margin: 0;">Detalhes da Seção</h2>
                 <a href="{{ url_for('cadastros_secao') }}" class="btn" style="background-color: var(--border-gray); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px;">Voltar</a>
             </div>
 
-            <div style="margin-bottom: 15px; display: flex; gap: 40px;">
+            <div class="flex-row" style="margin-bottom: 15px; gap: 40px;">
                 <div>
                     <span style="font-weight: 600; color: var(--text-gray); font-size: 0.95rem; display: block; margin-bottom: 5px;">Código da Seção</span>
                     <span style="font-size: 1.2rem; font-weight: bold; color: var(--dark-bg);">{{ secao.codigo }}</span>

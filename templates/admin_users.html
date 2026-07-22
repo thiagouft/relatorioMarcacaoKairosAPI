@@ -25,9 +25,9 @@
         <div class="card">
             <h3>Gerenciar Logins</h3>
 
-            <div style="display: flex; gap: 20px; margin-bottom: 30px;">
+            <div class="flex-row">
                 <!-- Create User -->
-                <div style="flex: 1;">
+                <div class="flex-col">
                     <h4>Criar Login</h4>
                     <form method="POST" action="{{ url_for('create_user') }}">
                         <div class="form-group">
@@ -56,7 +56,7 @@
                 </div>
 
                 <!-- Reset Password -->
-                <div style="flex: 1;">
+                <div class="flex-col">
                     <h4>Resetar Senha</h4>
                     <form method="POST" action="{{ url_for('reset_password') }}">
                         <div class="form-group">
@@ -118,10 +118,8 @@
     </div>
 
     <!-- Modal de Permissões -->
-    <div id="permissionsModal" class="modal"
-        style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.4);">
-        <div class="modal-content card"
-            style="background-color: var(--white); margin: 10% auto; padding: 20px; width: 50%; max-width: 500px; border-radius: var(--border-radius); box-shadow: var(--shadow);">
+    <div id="permissionsModal" class="modal" style="display: none;">
+        <div class="modal-content card">
             <span class="close" onclick="closePermissionsModal()"
                 style="color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
             <h3 style="margin-top:0;">Gerenciar Permissões</h3>
@@ -169,6 +167,14 @@
                             <input type="checkbox" id="perm_hora_extra_acumulada" name="hora_extra_acumulada">
                             Hora Extra Acumulada
                         </label>
+                        <label>
+                            <input type="checkbox" id="perm_intersticio" name="intersticio">
+                            Interstício
+                        </label>
+                        <label>
+                            <input type="checkbox" id="perm_exportar_csv" name="exportar_csv">
+                            Exportação CSV
+                        </label>
                     </div>
                 </div>
 
@@ -199,6 +205,8 @@
             document.getElementById('perm_admin_locais_ponto').checked = permissions.admin_locais_ponto === true;
             document.getElementById('perm_envio_comando').checked = permissions.envio_comando === true;
             document.getElementById('perm_hora_extra_acumulada').checked = permissions.hora_extra_acumulada === true;
+            document.getElementById('perm_intersticio').checked = permissions.intersticio === true;
+            document.getElementById('perm_exportar_csv').checked = permissions.exportar_csv === true;
             document.getElementById('perm_cadastros').checked = permissions.cadastros === true;
         }
 
