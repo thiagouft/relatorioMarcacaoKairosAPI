@@ -465,7 +465,7 @@ def api_intersticio():
     day_of_week = dt.weekday() # 0 = Monday, 6 = Sunday
 
     # Determine database schedule filter code
-    target_horario_codigo = '3001900002' if turno == 'A' else '3001900037'
+    target_horario_codigo = '3001900001' if turno == 'A' else '3001900037'
 
     db = get_db_session()
     try:
@@ -602,6 +602,110 @@ def api_intersticio():
         return jsonify({'error': str(e)}), 500
     finally:
         db.close()
+
+@app.route('/api/intersticio/bloquear', methods=['POST'])
+@login_required
+@permission_required('intersticio')
+def api_intersticio_bloquear():
+    try:
+        data = request.json
+        matriculas_list = data.get('matriculas', [])
+        
+        funcionarios = [int(m) for m in matriculas_list if str(m).isdigit()]
+        
+        if not funcionarios:
+            return jsonify({'sucesso': False, 'mensagem': 'Nenhum funcionário selecionado.'})
+            
+        # 1. Buscar todos os relógios do sistema
+        relogios = fetch_clocks()
+        if not relogios:
+            return jsonify({'sucesso': False, 'mensagem': 'Nenhum relógio encontrado para envio.'})
+            
+        relogio_list = []
+        for r in relogios:
+            num = r.get('RelogioNumero')
+            if num is not None:
+                try:
+                    relogio_list.append(int(num))
+                except ValueError:
+                    pass
+                    
+        if not relogio_list:
+            return jsonify({'sucesso': False, 'mensagem': 'Nenhum relógio válido cadastrado.'})
+            
+        # 2. Configurações para comando de bloqueio (Excluir Lista de Credenciais e Excluir Lista de Pessoas)
+        config_options = {
+            "ExcluirListaCredenciais": True,
+            "ExcluirListaPessoas": True
+        }
+        
+        pesquisa_falha = []
+        crachas_sucesso = []
+        falha_file_name = None
+        
+        # 3. Pesquisar cada crachá na API do Kairos
+        for cracha in funcionarios:
+            result = fetch_cracha(cracha)
+            if not result.get('sucesso'):
+                pesquisa_falha.append(result)
+            else:
+                crachas_sucesso.append(result)
+                if result.get('semTemplates'):
+                    pesquisa_falha.append({
+                        'cracha': result.get('cracha'),
+                        'nome': result.get('nome'),
+                        'sucesso': False,
+                        'mensagem': result.get('mensagem', 'Não possui Biometria'),
+                        'dataDesligamento': result.get('dataDesligamento')
+                    })
+        
+        result_response = {
+            'sucesso': False,
+            'mensagem': 'Nenhum crachá válido encontrado para processamento.',
+            'falhas': pesquisa_falha
+        }
+        
+        if pesquisa_falha:
+            log_file_name = 'falha_consulta_bloqueio.txt'
+            normalized = []
+            for p in pesquisa_falha:
+                normalized.append({
+                    'cracha': p.get('cracha'),
+                    'nome': p.get('nome'),
+                    'sucesso': p.get('sucesso', False),
+                    'mensagem': p.get('mensagem', ''),
+                    'dataDesligamento': p.get('dataDesligamento')
+                })
+            with open(os.path.join(app.root_path, 'static', log_file_name), 'w', encoding='utf-8') as f:
+                json.dump(normalized, f, indent=2, ensure_ascii=False)
+            falha_file_name = log_file_name
+            
+        if crachas_sucesso:
+            cracha_list = [c.get('cracha') for c in crachas_sucesso]
+            # Agendar os comandos no Kairos
+            schedule_result = schedule_commands(cracha_list, config_options, relogio_list)
+            
+            if schedule_result.get('sucesso'):
+                cabecalho = generate_cabecalho_arquivo(relogio_list, config_options)
+                sucesso_file_name = 'sucesso_bloqueio.pdf'
+                sucesso_content = [f"Crachá: {c.get('cracha')}, Nome: {c.get('nome')}" for c in crachas_sucesso]
+                generate_pdf_report(os.path.join(app.root_path, 'static', sucesso_file_name), cabecalho, sucesso_content)
+                
+                schedule_result['sucessoFileName'] = sucesso_file_name
+                
+            result_response = schedule_result
+            result_response['falhas'] = pesquisa_falha
+            if falha_file_name:
+                result_response['falhaFileName'] = falha_file_name
+                
+        log_action(f"Processou comandos de bloqueio para {len(funcionarios)} funcionarios a partir do intersticio")
+        return jsonify(result_response)
+        
+    except Exception as e:
+        print(f"Erro no processamento do bloqueio: {e}")
+        return jsonify({'sucesso': False, 'mensagem': f'Erro ao processar: {str(e)}'}), 500
+
+
 
 @app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
 @permission_required('admin_users')

@@ -6,6 +6,68 @@
     <title>Apuração de Interstício - Kairos CPRT</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: var(--primary-blue);
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px auto;
+        }
+        /* Custom scrollbar for modal table */
+        .modal-table-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .modal-table-container::-webkit-scrollbar-track {
+            background: var(--light-bg);
+        }
+        .modal-table-container::-webkit-scrollbar-thumb {
+            background: var(--border-gray);
+            border-radius: 4px;
+        }
+        /* Custom close button styling */
+        .close:hover {
+            color: var(--error-red);
+        }
+        #block-table-body td {
+            padding: 8px;
+            border-bottom: 1px solid var(--border-gray);
+        }
+        #block-table-body tr:hover {
+            background-color: var(--light-bg);
+        }
+        .success-text {
+            color: var(--success-green);
+            font-weight: bold;
+        }
+        .error-text {
+            color: var(--error-red);
+            font-weight: bold;
+        }
+        .download-section-modal {
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border-gray);
+        }
+        .download-section-modal a {
+            display: block;
+            margin: 5px 0;
+            color: var(--primary-blue);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .download-section-modal a:hover {
+            text-decoration: underline;
+        }
+        .btn-warning:hover {
+            background-color: #d32f2f;
+        }
+    </style>
 </head>
 <body>
     {% set active_page = 'intersticio' %}
@@ -34,7 +96,7 @@
                 <div class="filter-group">
                     <label for="turno">Turno / Horário</label>
                     <select id="turno" class="form-control">
-                        <option value="A">Turno A (3001900002) - Saídas a partir de 19:50</option>
+                        <option value="A">Turno A (3001900001) - Saídas a partir de 19:50</option>
                         <option value="B">Turno B (3001900037) - Saídas a partir de 05:50 (Seg-Qui) / 04:50 (Sex-Dom)</option>
                     </select>
                 </div>
@@ -52,9 +114,10 @@
                     <h3>Pessoas com Saída Tardia</h3>
                     <span id="results-count" class="badge" style="background-color: var(--primary-blue); color: white; padding: 5px 10px; border-radius: 4px; font-size: 0.9em; font-weight: 600; text-align: center; width: fit-content;">0 registros</span>
                 </div>
-                <div style="display: flex; gap: 10px; width: 100%; max-width: 320px;">
+                <div style="display: flex; gap: 10px; width: 100%; max-width: 480px;">
                     <button id="btn-export" class="btn btn-success" style="flex: 1;">Exportar Excel</button>
                     <button id="btn-export-pdf" class="btn btn-danger" style="flex: 1;">Exportar PDF</button>
+                    <button id="btn-bloquear" class="btn btn-warning" style="flex: 1; background-color: var(--error-red); color: white; display: none;">Bloquear</button>
                 </div>
             </div>
 
@@ -80,6 +143,62 @@
                 </table>
             </div>
         </div>
+
+        <!-- Modal de Bloqueio -->
+        <div id="blockModal" class="modal" style="display: none;">
+            <div class="modal-content card" style="max-width: 700px; width: 90%;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="margin: 0;">Bloquear Funcionários nos Relógios</h3>
+                    <span class="close" id="close-block-modal" style="cursor: pointer; font-size: 1.5em; font-weight: bold;">&times;</span>
+                </div>
+                <p style="color: var(--text-gray); margin-bottom: 15px;">
+                    Selecione os funcionários que deseja bloquear. O sistema enviará comandos de <strong>'Excluir Lista de Credenciais'</strong> e <strong>'Excluir Lista de Pessoas'</strong> para todos os relógios.
+                </p>
+                
+                <!-- Barra de Selecionar Todos -->
+                <div style="margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+                    <label style="font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                        <input type="checkbox" id="select-all-block" checked> Selecionar Todos
+                    </label>
+                    <span id="selected-block-count" class="badge" style="background-color: var(--primary-blue); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em;">0 selecionados</span>
+                </div>
+
+                <!-- Tabela de Funcionários no Modal -->
+                <div class="modal-table-container" style="max-height: 250px; overflow-y: auto; border: 1px solid var(--border-gray); border-radius: 4px; margin-bottom: 20px;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead style="position: sticky; top: 0; background-color: var(--light-bg); z-index: 1;">
+                            <tr>
+                                <th style="width: 40px; padding: 8px; border-bottom: 1px solid var(--border-gray);"></th>
+                                <th style="padding: 8px; border-bottom: 1px solid var(--border-gray); text-align: left;">Matrícula</th>
+                                <th style="padding: 8px; border-bottom: 1px solid var(--border-gray); text-align: left;">Nome</th>
+                                <th style="padding: 8px; border-bottom: 1px solid var(--border-gray); text-align: left;">Data Saída</th>
+                                <th style="padding: 8px; border-bottom: 1px solid var(--border-gray); text-align: left;">Hora Saída</th>
+                            </tr>
+                        </thead>
+                        <tbody id="block-table-body">
+                            <!-- Carregado via JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Loading inside modal -->
+                <div id="block-loading" style="display: none; text-align: center; padding: 20px; color: var(--text-gray);">
+                    <div class="spinner"></div>
+                    Processando o bloqueio no servidor Kairos. Por favor, aguarde...
+                </div>
+
+                <!-- Resultados do Envio (Igual ao de envio de comando) -->
+                <div id="block-result" style="display: none; margin-bottom: 20px; padding: 15px; border-radius: 4px; border: 1px solid var(--border-gray);" class="card">
+                    <!-- Links de download e mensagens de sucesso/falha -->
+                </div>
+
+                <!-- Footer / Ações -->
+                <div style="display: flex; justify-content: flex-end; gap: 10px;" id="block-modal-actions">
+                    <button id="btn-cancel-block" class="btn" style="background-color: var(--border-gray); color: var(--dark-bg);">Cancelar</button>
+                    <button id="btn-confirm-block" class="btn btn-danger" style="background-color: var(--error-red); color: white;">Bloquear</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -98,6 +217,7 @@
             errorMsg.style.display = 'none';
             tbody.innerHTML = '';
             tableContainer.style.display = 'none';
+            document.getElementById('btn-bloquear').style.display = 'none';
             currentData = [];
 
             if (!dateInput) {
@@ -145,6 +265,7 @@
                         `;
                         tbody.appendChild(tr);
                     });
+                    document.getElementById('btn-bloquear').style.display = 'inline-block';
                 }
                 tableContainer.style.display = 'block';
 
@@ -218,6 +339,163 @@
                 alert('Erro ao exportar PDF.');
             }
         });
+
+        // --- Lógica do Modal de Bloqueio ---
+        function updateSelectedCount() {
+            const checkedCount = document.querySelectorAll('.employee-block-checkbox:checked').length;
+            document.getElementById('selected-block-count').textContent = `${checkedCount} selecionados`;
+            document.getElementById('btn-confirm-block').disabled = (checkedCount === 0);
+        }
+
+        const closeBlockModal = () => {
+            document.getElementById('blockModal').style.display = 'none';
+        };
+
+        document.getElementById('btn-bloquear').addEventListener('click', () => {
+            // Limpar resultados antigos
+            document.getElementById('block-result').style.display = 'none';
+            document.getElementById('block-result').innerHTML = '';
+            document.getElementById('block-loading').style.display = 'none';
+            document.getElementById('block-modal-actions').style.display = 'flex';
+            
+            // Popular a tabela no modal
+            const modalTbody = document.getElementById('block-table-body');
+            modalTbody.innerHTML = '';
+            
+            if (currentData.length === 0) {
+                alert('Nenhum funcionário disponível para bloqueio.');
+                return;
+            }
+            
+            currentData.forEach((item, index) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="text-align: center; vertical-align: middle;">
+                        <input type="checkbox" class="employee-block-checkbox" data-matricula="${item.Matricula}" data-index="${index}" checked>
+                    </td>
+                    <td><strong>${item.Matricula}</strong></td>
+                    <td style="text-transform: capitalize;">${item.Nome}</td>
+                    <td>${item.DataFormatada}</td>
+                    <td><span style="color: var(--error-red); font-weight: 600;">${item.HoraFormatada}</span></td>
+                `;
+                modalTbody.appendChild(tr);
+            });
+            
+            // Inicializar checkboxes e contador
+            document.getElementById('select-all-block').checked = true;
+            updateSelectedCount();
+            
+            // Abrir modal
+            document.getElementById('blockModal').style.display = 'block';
+        });
+
+        document.getElementById('select-all-block').addEventListener('change', (e) => {
+            const isChecked = e.target.checked;
+            const checkboxes = document.querySelectorAll('.employee-block-checkbox');
+            checkboxes.forEach(cb => {
+                cb.checked = isChecked;
+            });
+            updateSelectedCount();
+        });
+
+        document.getElementById('block-table-body').addEventListener('change', (e) => {
+            if (e.target.classList.contains('employee-block-checkbox')) {
+                updateSelectedCount();
+                const checkboxes = document.querySelectorAll('.employee-block-checkbox');
+                const checkedCount = document.querySelectorAll('.employee-block-checkbox:checked').length;
+                document.getElementById('select-all-block').checked = (checkboxes.length === checkedCount);
+            }
+        });
+
+        document.getElementById('close-block-modal').addEventListener('click', closeBlockModal);
+        document.getElementById('btn-cancel-block').addEventListener('click', closeBlockModal);
+
+        window.addEventListener('click', (event) => {
+            const modal = document.getElementById('blockModal');
+            if (event.target === modal) {
+                closeBlockModal();
+            }
+        });
+
+        document.getElementById('btn-confirm-block').addEventListener('click', async () => {
+            const checkedCheckboxes = document.querySelectorAll('.employee-block-checkbox:checked');
+            const matriculas = Array.from(checkedCheckboxes).map(cb => cb.getAttribute('data-matricula'));
+            
+            if (matriculas.length === 0) {
+                alert('Por favor, selecione pelo menos um funcionário para realizar o bloqueio.');
+                return;
+            }
+            
+            const btnConfirm = document.getElementById('btn-confirm-block');
+            const modalActions = document.getElementById('block-modal-actions');
+            const loadingDiv = document.getElementById('block-loading');
+            const resultDiv = document.getElementById('block-result');
+            
+            // Atualizar UI do Modal
+            modalActions.style.display = 'none';
+            loadingDiv.style.display = 'block';
+            resultDiv.style.display = 'none';
+            resultDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/intersticio/bloquear', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ matriculas })
+                });
+                
+                let result;
+                try {
+                    result = await response.json();
+                } catch (e) {
+                    throw new Error('Não foi possível processar a resposta do servidor.');
+                }
+                
+                if (!response.ok) {
+                    throw new Error(result.mensagem || 'Erro ao processar requisição no servidor.');
+                }
+                
+                loadingDiv.style.display = 'none';
+                resultDiv.style.display = 'block';
+                modalActions.style.display = 'flex';
+                
+                if (result.sucesso) {
+                    resultDiv.innerHTML = `
+                        <p class="success-text">${result.mensagem || 'Operação realizada com sucesso!'}</p>
+                        <p>Comandos agendados com sucesso para os relógios.</p>
+                    `;
+                    renderBlockDownloads(resultDiv, result);
+                    alert('Processamento concluído com sucesso!');
+                } else {
+                    resultDiv.innerHTML = `<p class="error-text">${result.mensagem || 'Falha no processamento.'}</p>`;
+                    renderBlockDownloads(resultDiv, result);
+                }
+            } catch (error) {
+                loadingDiv.style.display = 'none';
+                resultDiv.style.display = 'block';
+                modalActions.style.display = 'flex';
+                resultDiv.innerHTML = `<p class="error-text">Erro de conexão: ${error.message}</p>`;
+            }
+        });
+
+        function renderBlockDownloads(resultDiv, result) {
+            const existing = resultDiv.querySelectorAll('.download-section-modal');
+            existing.forEach(el => el.remove());
+            
+            const parts = [];
+            if (result.sucessoFileName) {
+                parts.push(`<a href="/static/${result.sucessoFileName}" target="_blank">📥 Baixar Arquivo de Sucesso</a>`);
+            }
+            if (result.falhaFileName) {
+                parts.push(`<a href="/static/${result.falhaFileName}" target="_blank">📥 Baixar Arquivo de Falhas</a>`);
+            }
+            if (parts.length === 0) return;
+            
+            const div = document.createElement('div');
+            div.className = 'download-section-modal';
+            div.innerHTML = '<strong>Arquivos Gerados:</strong>' + parts.join('');
+            resultDiv.appendChild(div);
+        }
     </script>
 </body>
 </html>
