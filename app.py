@@ -790,7 +790,7 @@ CLOCK_GROUPS = {
   "NAUTICA": [30],
   "PI SAO FELIX": [35,36],
   "CENTRAL DE CONCRETO III": [7, 15],
-  "STANDBY": [27, 32],
+  "P12": [27, 32],
 }
 
 def get_location_by_clock_id(clock_id):
