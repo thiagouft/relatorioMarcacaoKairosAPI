@@ -92,6 +92,8 @@ class Pessoa(Base):
     horario_codigo = Column(String(50), ForeignKey('horarios.codigo'), nullable=True)
     secao_codigo = Column(String(50), ForeignKey('secoes.codigo'), nullable=True)
     situacao_id = Column(Integer, ForeignKey('situacoes.id'), nullable=True)
+    data_inicio_ferias = Column(DateTime, nullable=True)
+    data_fim_ferias = Column(DateTime, nullable=True)
 
 HORARIOS = [{'codigo': '3001900001', 'descricao': 'Seg. à Qui. 07:00 às 17:00 / Sex 07:00 às 16:00 / Almoço rigido 12:00 às 13:00'}, {'codigo': '3001900025', 'descricao': 'Seg. à Sex. 07:00 as 13:00 - Estagiario'}, {'codigo': '3001900006', 'descricao': 'Seg. à Qui. 16:30 às 02:00 / Sex. 15:30 às 00:00 - / Almoço 19:30 às 20:30'}, {'codigo': '3001900010', 'descricao': 'Seg à Qui. 23:00 às 08:00/ Sex 23:00 às 07:00 / Janta 03:00 ás 04:00'}, {'codigo': '3001900026', 'descricao': 'HORARIO -  Seg. a Qui. 07:00 às 16:00 (APENAS COM AUTORIZAÇÃO QUE PODE SE USAR)'}, {'codigo': '3001900037', 'descricao': 'Seg. á Qui. 17:00 às 02:22 / Sex. 16:00 ás 00:37 / Janta 21:00 às 22:00'}, {'codigo': '3001900019', 'descricao': 'Seg à Qui. 05:00 às 15:00 / Sex 05:00 às 14:00 / Almoço 11:00 às 12:00'}, {'codigo': '3001900023', 'descricao': 'Seg. à Qui. 22:00 às 07:00 / Sex 22:00 ás 06:00 / Janta 23:30 ás 00:30'}, {'codigo': '3001900003', 'descricao': 'Seg. à Qui. 14:00 às 23:45 / Sex. 13:00 às 22:00 - / Almoço 18:00 às 19:00'}, {'codigo': '3001900020', 'descricao': 'Seg. á Qui. 17:30 às 02:46 / Sex. 16:30 ás 01:46 / Almoço 22:30: às 23:30'}, {'codigo': '3001900002', 'descricao': 'Seg. à Sex. 07:00 às 14:00 / Almoço rigido 12:00 às 13:00'}, {'codigo': '3001900017', 'descricao': 'Seg à Qui. 21:00 às 06:09 / Sex 21:00 às 05:09 / Jantar 22:30 ás 23:30'}, {'codigo': '3001900009', 'descricao': 'Seg. à Sex. 13:00 às 17:00 - Jovem Aprendiz'}, {'codigo': '3001900008', 'descricao': 'Seg. à Sex. 07:00 às 11:00 - Jovem Aprendiz'}, {'codigo': '3001900005', 'descricao': 'Seg à Qui. 21:00 às 06:09 / Sex 21:00 às 05:09 / Janta 10:30 ás 11:30'}, {'codigo': '3001900021', 'descricao': 'Seg. à Sex. 08:00 às 12:00 - Jovem Aprendiz'}, {'codigo': '3001900022', 'descricao': 'Seg. à Sex. 14:00 às 18:00 - Jovem Aprendiz'}, {'codigo': '3001900024', 'descricao': 'MARITIMO - NAUTICA'}, {'codigo': '3001900007', 'descricao': 'Seg. á Qui. 19:00 às 04:20 / Sex. 19:00 ás 03:00 / Almoço 22:00 às 23:00'}, {'codigo': '3001900038', 'descricao': 'JORNADA - 1 - 12 x 36 - Seg. á Sex. 07:00 ás 19:00 / Almoço  12:00 às 13:00'}, {'codigo': '3001900044', 'descricao': 'Seg. à Sex. 07:00 às 10:00 - Medico do trabalho 02'}, {'codigo': '3001900041', 'descricao': 'JORNADA - 12 x 36 -Seg. á Sext.19:00 às 07:00   / janta 22:00  às 23:00'}]
 
@@ -182,6 +184,25 @@ def init_db():
             ))
             conn.commit()
             print("Coluna menu_permissions adicionada com sucesso.")
+
+        # Ensure existing DB has data_inicio_ferias and data_fim_ferias columns in pessoas table
+        result_ini = conn.execute(text(
+            "SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.COLUMNS "
+            "WHERE TABLE_NAME = 'pessoas' AND COLUMN_NAME = 'data_inicio_ferias'"
+        ))
+        if result_ini.scalar() == 0:
+            print("Adicionando coluna data_inicio_ferias à tabela pessoas...")
+            conn.execute(text("ALTER TABLE pessoas ADD data_inicio_ferias DATETIME NULL"))
+            conn.commit()
+
+        result_fim = conn.execute(text(
+            "SELECT COUNT(*) AS cnt FROM INFORMATION_SCHEMA.COLUMNS "
+            "WHERE TABLE_NAME = 'pessoas' AND COLUMN_NAME = 'data_fim_ferias'"
+        ))
+        if result_fim.scalar() == 0:
+            print("Adicionando coluna data_fim_ferias à tabela pessoas...")
+            conn.execute(text("ALTER TABLE pessoas ADD data_fim_ferias DATETIME NULL"))
+            conn.commit()
 
     Session = sessionmaker(bind=engine)
     session = Session()

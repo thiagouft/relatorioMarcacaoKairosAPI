@@ -1849,6 +1849,8 @@ def export_pdf():
 def cadastros_pessoas():
     log_action('Acessou menu de Cadastros - Pessoas')
     search = request.args.get('search', '').strip()
+    ferias_inicio = request.args.get('ferias_inicio', '').strip()
+    ferias_fim = request.args.get('ferias_fim', '').strip()
     page = request.args.get('page', 1, type=int)
     per_page = 20
     
@@ -1857,6 +1859,39 @@ def cadastros_pessoas():
         query = db.query(Pessoa)
         if search:
             query = query.filter((Pessoa.chapa.like(f"%{search}%")) | (Pessoa.nome.like(f"%{search}%")))
+
+        dt_ferias_inicio = None
+        dt_ferias_fim = None
+
+        if ferias_inicio:
+            try:
+                dt_ferias_inicio = datetime.datetime.strptime(ferias_inicio, "%Y-%m-%d")
+            except ValueError:
+                pass
+
+        if ferias_fim:
+            try:
+                dt_ferias_fim = datetime.datetime.strptime(ferias_fim, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            except ValueError:
+                pass
+
+        if dt_ferias_inicio:
+            dt_ini_start = dt_ferias_inicio.replace(hour=0, minute=0, second=0)
+            dt_ini_end = dt_ferias_inicio.replace(hour=23, minute=59, second=59)
+            query = query.filter(
+                Pessoa.data_inicio_ferias != None,
+                Pessoa.data_inicio_ferias >= dt_ini_start,
+                Pessoa.data_inicio_ferias <= dt_ini_end
+            )
+
+        if dt_ferias_fim:
+            dt_fim_start = dt_ferias_fim.replace(hour=0, minute=0, second=0)
+            dt_fim_end = dt_ferias_fim.replace(hour=23, minute=59, second=59)
+            query = query.filter(
+                Pessoa.data_fim_ferias != None,
+                Pessoa.data_fim_ferias >= dt_fim_start,
+                Pessoa.data_fim_ferias <= dt_fim_end
+            )
         
         total = query.count()
         total_pages = (total + per_page - 1) // per_page
@@ -1881,7 +1916,9 @@ def cadastros_pessoas():
                 'secao_desc': secoes_map.get(p.secao_codigo, ''),
                 'horario_codigo': p.horario_codigo,
                 'horario_desc': horarios_map.get(p.horario_codigo, ''),
-                'situacao_desc': situacoes_map.get(p.situacao_id, '')
+                'situacao_desc': situacoes_map.get(p.situacao_id, ''),
+                'data_inicio_ferias': p.data_inicio_ferias.strftime('%d/%m/%Y') if p.data_inicio_ferias else None,
+                'data_fim_ferias': p.data_fim_ferias.strftime('%d/%m/%Y') if p.data_fim_ferias else None
             })
             
         permissions = get_menu_permissions()
@@ -1891,6 +1928,8 @@ def cadastros_pessoas():
             page=page,
             total_pages=total_pages,
             search=search,
+            ferias_inicio=ferias_inicio,
+            ferias_fim=ferias_fim,
             permissions=permissions,
             is_admin=session.get('is_admin')
         )
@@ -2259,6 +2298,134 @@ def cadastros_importar():
     permissions = get_menu_permissions()
     return render_template(
         'cadastros_importar.html',
+        permissions=permissions,
+        is_admin=session.get('is_admin')
+    )
+
+def map_excel_ferias_columns(df):
+    import unicodedata
+    import re
+
+    def normalize(text):
+        if not isinstance(text, str):
+            text = str(text)
+        text = unicodedata.normalize('NFKD', text).encode('ASCII', 'ignore').decode('ASCII')
+        text = re.sub(r'[^a-zA-Z0-9]', '', text.lower())
+        return text
+
+    df_cols = list(df.columns)
+    normalized_cols = [normalize(c) for c in df_cols]
+
+    candidates = {
+        'chapa': ['chapa', 'codigo', 'codigofuncionario', 'matricula'],
+        'data_inicio': ['datainicio', 'datainicioferias', 'inicioferias', 'datadeinicio', 'inicio'],
+        'data_fim': ['datafim', 'datafimferias', 'fimferias', 'datadefim', 'fim']
+    }
+
+    mapping = {}
+    for key, patterns in candidates.items():
+        found_idx = None
+        for pattern in patterns:
+            if pattern in normalized_cols:
+                found_idx = normalized_cols.index(pattern)
+                break
+        mapping[key] = found_idx
+
+    return mapping
+
+@app.route('/cadastros/importar_ferias', methods=['GET', 'POST'])
+@login_required
+@permission_required('cadastros')
+def cadastros_importar_ferias():
+    if request.method == 'POST':
+        if 'file' not in request.files:
+            flash('Nenhum arquivo enviado.', 'danger')
+            return redirect(request.url)
+            
+        file = request.files['file']
+        if file.filename == '':
+            flash('Nenhum arquivo selecionado.', 'danger')
+            return redirect(request.url)
+            
+        if not (file.filename.lower().endswith('.xls') or file.filename.lower().endswith('.xlsx')):
+            flash('Tipo de arquivo inválido. Apenas .xls ou .xlsx são permitidos.', 'danger')
+            return redirect(request.url)
+            
+        try:
+            engine_to_use = 'xlrd' if file.filename.lower().endswith('.xls') else 'openpyxl'
+            file_bytes = io.BytesIO(file.read())
+            df = pd.read_excel(file_bytes, engine=engine_to_use)
+        except Exception as e:
+            flash(f'Erro ao processar o arquivo Excel: {e}', 'danger')
+            return redirect(request.url)
+
+        try:
+            mapping = map_excel_ferias_columns(df)
+            
+            mandatory_columns = {
+                'chapa': 'CHAPA',
+                'data_inicio': 'DATA INICIO',
+                'data_fim': 'DATA FIM'
+            }
+            
+            missing = [name for key, name in mandatory_columns.items() if mapping[key] is None]
+            if missing:
+                flash(f'O arquivo enviado possui colunas obrigatórias ausentes: {", ".join(missing)}.', 'danger')
+                return redirect(url_for('cadastros_importar_ferias'))
+
+            db = get_db_session()
+            updated_count = 0
+            skipped_count = 0
+
+            def clean_numeric_str(val):
+                if pd.isna(val):
+                    return None
+                s = str(val).strip()
+                if s.endswith('.0'):
+                    s = s[:-2]
+                if s.lower() == 'nan':
+                    return None
+                return s
+
+            def parse_dt(val):
+                if pd.isna(val):
+                    return None
+                if isinstance(val, (datetime.datetime, datetime.date)):
+                    return val
+                try:
+                    return pd.to_datetime(val).to_pydatetime()
+                except Exception:
+                    return None
+
+            for _, row in df.iterrows():
+                chapa = clean_numeric_str(row.iloc[mapping['chapa']]) if mapping['chapa'] is not None else None
+                if not chapa:
+                    continue
+
+                data_ini = parse_dt(row.iloc[mapping['data_inicio']]) if mapping['data_inicio'] is not None else None
+                data_fim = parse_dt(row.iloc[mapping['data_fim']]) if mapping['data_fim'] is not None else None
+
+                p = db.query(Pessoa).filter_by(chapa=chapa).first()
+                if p:
+                    p.data_inicio_ferias = data_ini
+                    p.data_fim_ferias = data_fim
+                    updated_count += 1
+                else:
+                    skipped_count += 1
+
+            db.commit()
+            log_action(f'Importou planilha de férias. Atualizados: {updated_count}, Não encontrados: {skipped_count}')
+            flash(f'Importação de férias concluída com sucesso! {updated_count} colaboradores tiveram suas férias atualizadas.', 'success')
+            db.close()
+            return redirect(url_for('cadastros_pessoas'))
+
+        except Exception as e:
+            flash(f'Erro ao processar a planilha de férias: {e}', 'danger')
+            return redirect(url_for('cadastros_importar_ferias'))
+
+    permissions = get_menu_permissions()
+    return render_template(
+        'cadastros_importar_ferias.html',
         permissions=permissions,
         is_admin=session.get('is_admin')
     )

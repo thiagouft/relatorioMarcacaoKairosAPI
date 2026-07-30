@@ -21,18 +21,37 @@
         {% endwith %}
 
         <div class="card">
-            <div class="card-header">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                 <h2 style="color: var(--primary-blue); margin: 0;">Cadastro de Pessoas</h2>
-                <a href="{{ url_for('cadastros_importar') }}" class="btn btn-success" style="width: auto;">+ Importar Efetivo (.xls)</a>
+                <div style="display: flex; gap: 10px;">
+                    <a href="{{ url_for('cadastros_importar') }}" class="btn btn-success" style="width: auto;">+ Importar Efetivo (.xls)</a>
+                    <a href="{{ url_for('cadastros_importar_ferias') }}" class="btn btn-primary" style="width: auto; background-color: #17a2b8; border-color: #17a2b8; color: #fff;">+ Importar Férias (.xlsx)</a>
+                </div>
             </div>
 
             <!-- Search Form -->
-            <form method="GET" action="{{ url_for('cadastros_pessoas') }}" class="search-form">
-                <input type="text" name="search" class="form-control" placeholder="Pesquisar por Chapa ou Nome..." value="{{ search }}" style="flex: 1;">
-                <button type="submit" class="btn btn-primary" style="width: auto;">Buscar</button>
-                {% if search %}
-                <a href="{{ url_for('cadastros_pessoas') }}" class="btn" style="width: auto; background-color: var(--border-gray); color: var(--dark-bg);">Limpar</a>
-                {% endif %}
+            <form method="GET" action="{{ url_for('cadastros_pessoas') }}" class="search-form" style="display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end; margin-bottom: 20px; background-color: var(--light-bg); padding: 15px; border-radius: 8px; border: 1px solid var(--border-gray);">
+                <div style="flex: 2; min-width: 200px;">
+                    <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-gray); margin-bottom: 5px; display: block;">Pesquisa Geral</label>
+                    <input type="text" name="search" class="form-control" placeholder="Chapa ou Nome..." value="{{ search }}">
+                </div>
+                
+                <div style="flex: 1; min-width: 160px;">
+                    <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-gray); margin-bottom: 5px; display: block;" title="Filtrar quem SAIU de férias nesta data">Início das Férias (Saída):</label>
+                    <input type="date" name="ferias_inicio" class="form-control" value="{{ ferias_inicio }}" title="Selecione o dia que o colaborador saiu de férias">
+                </div>
+
+                <div style="flex: 1; min-width: 160px;">
+                    <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-gray); margin-bottom: 5px; display: block;" title="Filtrar quem TERMINA as férias nesta data">Fim das Férias (Retorno):</label>
+                    <input type="date" name="ferias_fim" class="form-control" value="{{ ferias_fim }}" title="Selecione o dia que o colaborador termina as férias">
+                </div>
+
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button type="submit" class="btn btn-primary" style="width: auto; height: 38px; padding: 0 15px;">Filtrar</button>
+                    {% if search or ferias_inicio or ferias_fim %}
+                    <a href="{{ url_for('cadastros_pessoas') }}" class="btn" style="width: auto; height: 38px; padding: 0 15px; background-color: var(--border-gray); color: var(--dark-bg); text-decoration: none; display: inline-flex; align-items: center;">Limpar</a>
+                    {% endif %}
+                </div>
             </form>
 
             <div class="table-container">
@@ -52,7 +71,14 @@
                             {% for p in pessoas %}
                             <tr onclick="window.location='{{ url_for('cadastros_pessoa_detalhe', chapa=p.chapa) }}'" style="cursor: pointer;">
                                 <td><strong>{{ p.chapa }}</strong></td>
-                                <td>{{ p.nome }}</td>
+                                <td>
+                                    {{ p.nome }}
+                                    {% if (ferias_inicio or ferias_fim) and p.data_inicio_ferias and p.data_fim_ferias %}
+                                    <div style="font-size: 0.78rem; color: #0369A1; background-color: #E0F2FE; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-top: 3px;">
+                                        Férias: {{ p.data_inicio_ferias }} a {{ p.data_fim_ferias }}
+                                    </div>
+                                    {% endif %}
+                                </td>
                                 <td>{{ p.nome_funcao or 'Não informada' }}</td>
                                 <td><span title="{{ p.secao_codigo }}">{{ p.secao_desc or 'Não associada' }}</span></td>
                                 <td>
@@ -81,13 +107,13 @@
             <!-- Pagination -->
             {% if total_pages > 1 %}
             <div class="pagination">
-                <a href="{{ url_for('cadastros_pessoas', page=1, search=search) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == 1 %}pointer-events: none; opacity: 0.5;{% endif %}">&laquo; Primeira</a>
-                <a href="{{ url_for('cadastros_pessoas', page=page-1, search=search) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == 1 %}pointer-events: none; opacity: 0.5;{% endif %}">&lsaquo; Anterior</a>
+                <a href="{{ url_for('cadastros_pessoas', page=1, search=search, ferias_inicio=ferias_inicio, ferias_fim=ferias_fim) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == 1 %}pointer-events: none; opacity: 0.5;{% endif %}">&laquo; Primeira</a>
+                <a href="{{ url_for('cadastros_pessoas', page=page-1, search=search, ferias_inicio=ferias_inicio, ferias_fim=ferias_fim) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == 1 %}pointer-events: none; opacity: 0.5;{% endif %}">&lsaquo; Anterior</a>
                 
                 <span style="align-self: center; font-size: 0.9rem; color: var(--text-gray);">Página <strong>{{ page }}</strong> de <strong>{{ total_pages }}</strong></span>
                 
-                <a href="{{ url_for('cadastros_pessoas', page=page+1, search=search) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == total_pages %}pointer-events: none; opacity: 0.5;{% endif %}">Próxima &rsaquo;</a>
-                <a href="{{ url_for('cadastros_pessoas', page=total_pages, search=search) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == total_pages %}pointer-events: none; opacity: 0.5;{% endif %}">Última &raquo;</a>
+                <a href="{{ url_for('cadastros_pessoas', page=page+1, search=search, ferias_inicio=ferias_inicio, ferias_fim=ferias_fim) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == total_pages %}pointer-events: none; opacity: 0.5;{% endif %}">Próxima &rsaquo;</a>
+                <a href="{{ url_for('cadastros_pessoas', page=total_pages, search=search, ferias_inicio=ferias_inicio, ferias_fim=ferias_fim) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == total_pages %}pointer-events: none; opacity: 0.5;{% endif %}">Última &raquo;</a>
             </div>
             {% endif %}
         </div>

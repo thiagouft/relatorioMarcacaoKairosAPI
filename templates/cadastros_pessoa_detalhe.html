@@ -124,6 +124,28 @@
                         {% endif %}
                     </div>
                 </div>
+
+                <div class="detail-item">
+                    <div class="detail-label">Data Início das Férias</div>
+                    <div class="detail-value">
+                        {% if pessoa.data_inicio_ferias %}
+                        <span style="color: #0369A1; font-weight: 600;">{{ pessoa.data_inicio_ferias.strftime('%d/%m/%Y') }}</span>
+                        {% else %}
+                        Não informada
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="detail-item">
+                    <div class="detail-label">Data Fim das Férias</div>
+                    <div class="detail-value">
+                        {% if pessoa.data_fim_ferias %}
+                        <span style="color: #0369A1; font-weight: 600;">{{ pessoa.data_fim_ferias.strftime('%d/%m/%Y') }}</span>
+                        {% else %}
+                        Não informada
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
     </div>

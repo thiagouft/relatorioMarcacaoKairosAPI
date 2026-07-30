@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Importação de Férias - Kairos CPRT</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    {% set active_page = 'cadastros' %}
+    {% include 'navbar.html' %}
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <div class="card" style="max-width: 600px; margin: 40px auto; padding: 30px;">
+            <h2 style="color: var(--primary-blue); margin-bottom: 20px; border-bottom: 2px solid var(--primary-blue); padding-bottom: 10px;">Importação de Férias</h2>
+            <p style="color: var(--text-gray); margin-bottom: 30px; line-height: 1.5;">
+                Selecione a planilha de férias (no formato <strong>.xlsx</strong> ou <strong>.xls</strong>) contendo as colunas <strong>CHAPA</strong>, <strong>DATA INICIO</strong> e <strong>DATA FIM</strong>.
+                O sistema irá atualizar as datas de férias dos colaboradores cadastrados que forem localizados pela matrícula (Chapa). 
+                Os colaboradores não encontrados na planilha serão mantidos sem dados de férias.
+            </p>
+
+            <form method="POST" action="{{ url_for('cadastros_importar_ferias') }}" enctype="multipart/form-data">
+                <div class="form-group" style="margin-bottom: 30px;">
+                    <label for="file" style="font-weight: bold; margin-bottom: 10px; display: block;">Planilha de Férias (ferias.xlsx / .xls)</label>
+                    <input type="file" id="file" name="file" class="form-control" accept=".xls,.xlsx" required style="padding: 10px; border: 2px dashed var(--border-gray); background-color: var(--light-bg); cursor: pointer;">
+                </div>
+
+                <div style="display: flex; gap: 15px;">
+                    <a href="{{ url_for('cadastros_pessoas') }}" class="btn" style="flex: 1; background-color: var(--border-gray); color: var(--dark-bg); text-align: center; text-decoration: none; border-radius: 4px; line-height: 20px;">Cancelar</a>
+                    <button type="submit" class="btn btn-primary" style="flex: 2; background-color: #17a2b8; border-color: #17a2b8;">Iniciar Importação</button>
+                </div>
+            </form>
+
+            <div id="loading" style="display: none; margin-top: 20px; text-align: center;">
+                <p style="color: var(--warning-yellow); font-weight: bold; margin-bottom: 5px;">Processando planilha de férias...</p>
+                <p style="font-size: 0.85rem; color: var(--text-gray);">Atualizando os registros dos colaboradores. Por favor, aguarde.</p>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <img src="{{ url_for('static', filename='images/mixestec_logo.png') }}" alt="Mixestec Logo" class="footer-logo">
+            <p>Desenvolvido por Thiago Silva Pereira</p>
+        </div>
+    </footer>
+
+    <script>
+        document.querySelector('form').addEventListener('submit', function(e) {
+            document.getElementById('loading').style.display = 'block';
+            
+            const submitBtn = document.querySelector('button[type="submit"]');
+            if (submitBtn) submitBtn.disabled = true;
+            
+            const cancelLink = document.querySelector('a.btn');
+            if (cancelLink) {
+                cancelLink.style.pointerEvents = 'none';
+                cancelLink.style.opacity = '0.5';
+            }
+        });
+    </script>
+</body>
+</html>
