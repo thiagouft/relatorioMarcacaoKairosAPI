@@ -238,6 +238,116 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Lógica para o botão Agendar Comando em Envio de Comando
+    const btnAgendarModal = document.getElementById("agendarEnvioComando");
+    const modalAgendamento = document.getElementById("modalAgendamento");
+    const btnCancelarModal = document.getElementById("cancelarModalAgendamento");
+    const btnConfirmarModal = document.getElementById("confirmarModalAgendamento");
+
+    if (btnAgendarModal && modalAgendamento) {
+        btnAgendarModal.addEventListener("click", () => {
+            const fileInput = document.getElementById("arquivo");
+            const matriculasInput = document.getElementById("matriculas").value.trim();
+
+            if (fileInput.files.length === 0 && matriculasInput.length === 0) {
+                alert("Por favor, selecione um arquivo ou digite as matrículas antes de agendar!");
+                return;
+            }
+
+            const checkboxesComandos = document.querySelectorAll('input[name="comandos"]:checked');
+            if (checkboxesComandos.length === 0) {
+                alert("Por favor, selecione pelo menos um comando!");
+                return;
+            }
+
+            const checkboxesRelogios = document.querySelectorAll('input[name="relogios"]:checked');
+            if (checkboxesRelogios.length === 0) {
+                alert("Por favor, selecione pelo menos um relógio!");
+                return;
+            }
+
+            modalAgendamento.style.display = "flex";
+        });
+
+        if (btnCancelarModal) {
+            btnCancelarModal.addEventListener("click", () => {
+                modalAgendamento.style.display = "none";
+            });
+        }
+
+        if (btnConfirmarModal) {
+            btnConfirmarModal.addEventListener("click", async () => {
+                const dataHoraVal = document.getElementById("dataHoraModal").value;
+                if (!dataHoraVal) {
+                    alert("Por favor, selecione a data e hora para o agendamento!");
+                    return;
+                }
+
+                const fileInput = document.getElementById("arquivo");
+                const matriculasInput = document.getElementById("matriculas").value.trim();
+                const resultDiv = document.getElementById("result");
+
+                const formData = new FormData();
+                formData.append("data_hora_execucao", dataHoraVal);
+
+                if (fileInput.files.length > 0) {
+                    formData.append("arquivo", fileInput.files[0]);
+                } else if (matriculasInput.length > 0) {
+                    const matriculas = matriculasInput
+                        .split(",")
+                        .map((m) => m.trim())
+                        .filter((m) => m !== "");
+                    formData.append("matriculas", JSON.stringify(matriculas));
+                }
+
+                const comandos = {};
+                document.querySelectorAll('input[name="comandos"]:checked').forEach((cb) => {
+                    comandos[cb.value] = true;
+                });
+                formData.append("comandos", JSON.stringify(comandos));
+
+                const relogios = [];
+                document.querySelectorAll('input[name="relogios"]:checked').forEach((cb) => {
+                    relogios.push(parseInt(cb.value, 10));
+                });
+                formData.append("relogios", JSON.stringify(relogios));
+
+                btnConfirmarModal.disabled = true;
+                btnConfirmarModal.textContent = "Salvando...";
+
+                try {
+                    const response = await fetch("/api/agendamento_comandos/criar", {
+                        method: "POST",
+                        body: formData,
+                    });
+
+                    const res = await response.json();
+                    modalAgendamento.style.display = "none";
+                    resultDiv.style.display = "block";
+
+                    if (res.sucesso) {
+                        resultDiv.innerHTML = `
+                            <p class="success" style="color: #276749; background-color: #c6f6d5; padding: 0.75rem; border-radius: 6px; font-weight: 500;">
+                                ✅ ${res.mensagem} <br>
+                                <a href="/comandos_agendados" style="color: #2b6cb0; font-weight: 600; text-decoration: underline;">👉 Ver Comandos Agendados</a>
+                            </p>
+                        `;
+                        alert("Agendamento criado com sucesso!");
+                    } else {
+                        resultDiv.innerHTML = `<p class="error" style="color: #9b2c2c; background-color: #fed7d7; padding: 0.75rem; border-radius: 6px;">❌ ${res.mensagem}</p>`;
+                    }
+                } catch (err) {
+                    modalAgendamento.style.display = "none";
+                    resultDiv.style.display = "block";
+                    resultDiv.innerHTML = `<p class="error">Erro ao agendar: ${err.message}</p>`;
+                } finally {
+                    btnConfirmarModal.disabled = false;
+                    btnConfirmarModal.textContent = "Confirmar Agendamento";
+                }
+            });
+        }
+    }
+
     async function fetchRelogios() {
         const relogiosDiv = document.getElementById("relogios");
         relogiosDiv.innerHTML = "<em>Carregando relógios...</em>";

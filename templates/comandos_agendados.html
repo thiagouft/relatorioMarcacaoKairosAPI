@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comandos Agendados - Kairos CPRT</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/envio_comando.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Roboto:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        .agendamentos-card {
+            background-color: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e2e8f0;
+            width: 100%;
+        }
+
+        .agendamentos-table-container {
+            width: 100%;
+            overflow-x: auto;
+            margin-top: 1rem;
+        }
+
+        .agendamentos-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        .agendamentos-table th,
+        .agendamentos-table td {
+            padding: 0.85rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .agendamentos-table th {
+            background-color: #f7fafc;
+            color: #2d3748;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            letter-spacing: 0.05em;
+        }
+
+        .agendamentos-table tr:hover {
+            background-color: #f8fafc;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.3rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .badge-pendente {
+            background-color: #fefcbf;
+            color: #744210;
+        }
+
+        .badge-executando {
+            background-color: #bee3f8;
+            color: #2b6cb0;
+        }
+
+        .badge-executado {
+            background-color: #c6f6d5;
+            color: #22543d;
+        }
+
+        .badge-erro {
+            background-color: #fed7d7;
+            color: #9b2c2c;
+        }
+
+        .badge-cancelado {
+            background-color: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .btn-sm {
+            padding: 0.35rem 0.75rem;
+            font-size: 0.8rem;
+            border-radius: 6px;
+            font-weight: 600;
+        }
+
+        .header-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .header-actions h2 {
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+            font-size: 1.5rem;
+            color: #1a202c;
+        }
+    </style>
+</head>
+
+<body>
+    {% set active_page = 'comandos_agendados' %}
+    {% include 'navbar.html' %}
+
+    <div class="container" style="flex-direction: column; gap: 1.5rem; padding-top: 1.5rem; padding-bottom: 2.5rem;">
+
+        <!-- Alert messages -->
+        <div id="alertContainer"></div>
+
+        <div class="agendamentos-card">
+            <div class="header-actions">
+                <h2>Lista de Comandos Agendados</h2>
+                <div style="display: flex; gap: 0.75rem;">
+                    <a href="{{ url_for('agendamento_comandos') }}" class="btn btn-primary btn-sm" style="text-decoration: none; display: inline-flex; align-items: center; gap: 0.3rem;">
+                        ➕ Novo Agendamento
+                    </a>
+                    <button id="btnAtualizarLista" class="btn btn-secondary btn-sm" style="background-color: #edf2f7; color: #2d3748; border: 1px solid #cbd5e0; cursor: pointer;">
+                        🔄 Atualizar Lista
+                    </button>
+                </div>
+            </div>
+
+            <div class="agendamentos-table-container">
+                <table class="agendamentos-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Data/Hora Agendada</th>
+                            <th>Usuário</th>
+                            <th>Comandos</th>
+                            <th>Matrículas</th>
+                            <th>Relógios</th>
+                            <th>Status</th>
+                            <th>Resultado/Log</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaAgendamentos">
+                        <tr>
+                            <td colspan="9" style="text-align: center; color: #718096; padding: 2rem;">Carregando agendamentos...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <img src="{{ url_for('static', filename='images/mixestec_logo.png') }}" alt="Mixestec Logo" class="footer-logo">
+            <p>Desenvolvido por Thiago Silva Pereira</p>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            carregarAgendamentos();
+            document.getElementById('btnAtualizarLista').addEventListener('click', carregarAgendamentos);
+            
+            // Auto-refresh a cada 30 segundos
+            setInterval(carregarAgendamentos, 30000);
+        });
+
+        function showAlert(mensagem, tipo = 'success') {
+            const container = document.getElementById('alertContainer');
+            container.innerHTML = `<div class="alert alert-${tipo}" style="padding: 1rem; margin-bottom: 1rem; border-radius: 6px; color: ${tipo === 'success' ? '#22543d' : '#9b2c2c'}; background-color: ${tipo === 'success' ? '#c6f6d5' : '#fed7d7'};">${mensagem}</div>`;
+            setTimeout(() => { container.innerHTML = ''; }, 5000);
+        }
+
+        async function carregarAgendamentos() {
+            const tbody = document.getElementById('tabelaAgendamentos');
+            try {
+                const response = await fetch('/api/agendamento_comandos/listar');
+                const data = await response.json();
+
+                if (!data.sucesso || !data.agendamentos || data.agendamentos.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #718096; padding: 2rem;">Nenhum comando agendado no momento.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = '';
+                data.agendamentos.forEach(item => {
+                    const tr = document.createElement('tr');
+                    
+                    let statusBadgeClass = 'badge-pendente';
+                    if (item.status === 'Executando') statusBadgeClass = 'badge-executando';
+                    if (item.status === 'Executado') statusBadgeClass = 'badge-executado';
+                    if (item.status === 'Erro') statusBadgeClass = 'badge-erro';
+                    if (item.status === 'Cancelado') statusBadgeClass = 'badge-cancelado';
+
+                    let acoesTd = '';
+                    if (item.status === 'Pendente') {
+                        acoesTd = `<button onclick="removerAgendamento(${item.id})" class="btn btn-danger btn-sm" style="cursor: pointer;">Remover</button>`;
+                    } else {
+                        let btns = [];
+                        if (item.sucesso_file) {
+                            btns.push(`<a href="/static/${item.sucesso_file}" target="_blank" class="btn btn-success btn-sm" style="text-decoration: none; display: inline-flex; align-items: center; gap: 0.2rem; background-color: #38a169; color: white; margin-right: 4px; padding: 0.3rem 0.6rem; border-radius: 4px;">📥 Sucesso</a>`);
+                        }
+                        if (item.falha_file) {
+                            btns.push(`<a href="/static/${item.falha_file}" target="_blank" class="btn btn-danger btn-sm" style="text-decoration: none; display: inline-flex; align-items: center; gap: 0.2rem; background-color: #e53e3e; color: white; margin-right: 4px; padding: 0.3rem 0.6rem; border-radius: 4px;">📥 Falhas</a>`);
+                        }
+                        
+                        if (!item.sucesso_file && !item.falha_file) {
+                            btns.push(`<button onclick="gerarArquivosAgendamento(${item.id})" class="btn btn-secondary btn-sm" style="cursor: pointer; background-color: #4a5568; color: white; padding: 0.3rem 0.6rem; border-radius: 4px;" title="Gerar relatórios de Sucesso/Falha">📄 Gerar Arquivos</button>`);
+                        }
+                        
+                        acoesTd = btns.join('') || '<span style="color: #a0aec0;">-</span>';
+                    }
+
+                    tr.innerHTML = `
+                        <td><strong>#${item.id}</strong></td>
+                        <td><strong>${item.data_hora_execucao}</strong></td>
+                        <td>${item.usuario || '-'}</td>
+                        <td>${item.comandos_str}</td>
+                        <td>${item.qtd_matriculas} matrículas</td>
+                        <td>${item.qtd_relogios} relógios</td>
+                        <td><span class="badge ${statusBadgeClass}">${item.status}</span></td>
+                        <td><small style="color: #4a5568;">${item.resultado || '-'}</small></td>
+                        <td>${acoesTd}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+            } catch (err) {
+                console.error('Erro ao listar agendamentos:', err);
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #e53e3e; padding: 2rem;">Erro ao carregar lista de agendamentos.</td></tr>';
+            }
+        }
+
+        async function removerAgendamento(id) {
+            if (!confirm('Deseja realmente remover este agendamento da lista? Ele não será executado.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/agendamento_comandos/remover/${id}`, {
+                    method: 'POST'
+                });
+                const res = await response.json();
+                if (res.sucesso) {
+                    showAlert('Agendamento removido com sucesso!', 'success');
+                    carregarAgendamentos();
+                } else {
+                    showAlert(res.mensagem || 'Erro ao remover agendamento.', 'danger');
+                }
+            } catch (err) {
+                console.error('Erro ao remover agendamento:', err);
+                showAlert('Erro ao enviar solicitação de remoção.', 'danger');
+            }
+        }
+
+        async function gerarArquivosAgendamento(id) {
+            try {
+                showAlert('Gerando arquivos de relatório...', 'success');
+                const response = await fetch(`/api/agendamento_comandos/gerar_arquivos/${id}`, {
+                    method: 'POST'
+                });
+                const res = await response.json();
+                if (res.sucesso) {
+                    showAlert('Arquivos gerados com sucesso!', 'success');
+                    carregarAgendamentos();
+                } else {
+                    showAlert(res.mensagem || 'Erro ao gerar arquivos.', 'danger');
+                }
+            } catch (err) {
+                console.error('Erro ao gerar arquivos:', err);
+                showAlert('Erro na solicitação ao servidor.', 'danger');
+            }
+        }
+    </script>
+</body>
+
+</html>

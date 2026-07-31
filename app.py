@@ -7,9 +7,11 @@ import pandas as pd
 import io
 import datetime
 import json
+import threading
+import time
 from functools import wraps
 from config import Config, get_local_now
-from db_setup import User, Log, Base, Horario, Secao, Gerencia, GerenciaSecao, Situacao, Pessoa
+from db_setup import User, Log, Base, Horario, Secao, Gerencia, GerenciaSecao, Situacao, Pessoa, AgendamentoComando
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -34,6 +36,23 @@ app.config.from_object(Config)
 
 # Tempo limite para requisições à API externa do Kairos
 TIMEOUT = 60
+
+CLOCK_GROUPS = {
+    "P10": [1, 11, 23, 29],
+    "COCA": [3, 14, 31],
+    "CANTEIRO III": [18, 22, 24, 25],
+    "PIPE MARABA": [5, 9, 20],
+    "OFICINA II": [8],
+    "PIPE SAO FELIX": [2, 4, 10, 19, 21, 28],
+    "TREINAMENTO": [16],
+    "MUTRAN CANTEIRO IV": [13, 17],
+    "TERRAPLENAGEM III": [6, 12],
+    "TENDA MOTORISTAS III": [26],
+    "NAUTICA": [30],
+    "PI SAO FELIX": [33, 34],
+    "CENTRAL DE CONCRETO III": [7, 15],
+    "P12": [27, 32]
+}
 
 # Database Setup
 engine = create_engine(app.config['SQLALCHEMY_DATABASE_URI'])
@@ -332,6 +351,22 @@ def envio_comando():
     log_action('Acessou menu de Envio de Comandos')
     permissions = get_menu_permissions()
     return render_template('envio_comando.html', is_admin=session.get('is_admin'), permissions=permissions)
+
+@app.route('/admin/agendamento_comandos')
+@app.route('/agendamento_comandos')
+@permission_required('envio_comando')
+def agendamento_comandos():
+    log_action('Acessou menu de Agendamento de Comandos')
+    permissions = get_menu_permissions()
+    return render_template('agendamento_comandos.html', is_admin=session.get('is_admin'), permissions=permissions)
+
+@app.route('/admin/comandos_agendados')
+@app.route('/comandos_agendados')
+@permission_required('envio_comando')
+def comandos_agendados():
+    log_action('Acessou menu de Lista de Comandos Agendados')
+    permissions = get_menu_permissions()
+    return render_template('comandos_agendados.html', is_admin=session.get('is_admin'), permissions=permissions)
 
 @app.route('/hora_extra_acumulada')
 @permission_required('hora_extra_acumulada')
@@ -1356,6 +1391,377 @@ def api_envio_comando_processar():
     except Exception as e:
         print(f"Erro no processamento: {e}")
         return jsonify({'sucesso': False, 'mensagem': f'Erro ao processar: {str(e)}'}), 500
+
+# --- Agendamento de Comandos API e Worker ---
+
+def process_scheduled_commands_worker():
+    """
+    Worker em segundo plano para executar comandos de relógio agendados no momento correto.
+    """
+    while True:
+        try:
+            time.sleep(15)
+            db = get_db_session()
+            now = get_local_now()
+            now_naive = now.replace(tzinfo=None)
+
+            pending_jobs = db.query(AgendamentoComando).filter(
+                AgendamentoComando.status == 'Pendente',
+                AgendamentoComando.data_hora_execucao <= now_naive
+            ).order_by(AgendamentoComando.data_hora_execucao.asc(), AgendamentoComando.id.asc()).all()
+
+            for job in pending_jobs:
+                job.status = 'Executando'
+                db.commit()
+
+                try:
+                    comandos_obj = json.loads(job.comandos)
+                    relogio_list = json.loads(job.relogios)
+                    matriculas_list = json.loads(job.matriculas)
+                    funcionarios = [int(m) for m in matriculas_list if str(m).isdigit()]
+
+                    if not funcionarios:
+                        job.status = 'Erro'
+                        job.resultado = 'Nenhum funcionário válido encontrado.'
+                        db.commit()
+                        continue
+
+                    pesquisa_falha = []
+                    crachas_sucesso = []
+
+                    for cracha in funcionarios:
+                        result = fetch_cracha(cracha)
+                        if not result.get('sucesso'):
+                            pesquisa_falha.append(result)
+                        else:
+                            crachas_sucesso.append(result)
+                            if result.get('semTemplates'):
+                                pesquisa_falha.append({
+                                    'cracha': result.get('cracha'),
+                                    'nome': result.get('nome'),
+                                    'sucesso': False,
+                                    'mensagem': result.get('mensagem', 'Não possui Biometria')
+                                })
+
+                    if crachas_sucesso:
+                        cracha_list = [c.get('cracha') for c in crachas_sucesso]
+                        schedule_result = schedule_commands(cracha_list, comandos_obj, relogio_list)
+                        if schedule_result.get('sucesso'):
+                            job.status = 'Executado'
+                            job.resultado = f"Executado com sucesso para {len(crachas_sucesso)} colaboradores em {len(relogio_list)} relógios."
+                            if pesquisa_falha:
+                                job.resultado += f" ({len(pesquisa_falha)} falhas/sem biometria)"
+                        else:
+                            job.status = 'Erro'
+                            job.resultado = schedule_result.get('mensagem', 'Erro ao agendar comandos no Kairos')
+                    else:
+                        job.status = 'Erro'
+                        job.resultado = f"Falha na consulta dos crachás ({len(pesquisa_falha)} erros)."
+
+                    # Gerar arquivos de sucesso (PDF) e falha (TXT) automaticamente
+                    try:
+                        sucesso_f, falha_f = generate_reports_for_job(job, pesquisa_falha, crachas_sucesso, comandos_obj, relogio_list, app.root_path)
+                        job.sucesso_file = sucesso_f
+                        job.falha_file = falha_f
+                    except Exception as r_err:
+                        print(f"[AGENDAMENTO WORKER] Erro ao gerar arquivos: {r_err}")
+
+                except Exception as ex:
+                    job.status = 'Erro'
+                    job.resultado = f"Exceção durante a execução: {str(ex)}"
+
+                db.commit()
+                time.sleep(2)  # Pausa de segurança entre execuções de agendamentos para não sobrecarregar a API do Kairos
+
+            db.close()
+        except Exception as e:
+            print(f"[AGENDAMENTO WORKER] Erro no loop: {e}")
+
+def generate_reports_for_job(job, pesquisa_falha, crachas_sucesso, comandos_obj, relogio_list, app_root):
+    sucesso_file_name = None
+    falha_file_name = None
+
+    if pesquisa_falha:
+        log_file_name = f'falha_agendamento_{job.id}.txt'
+        normalized = []
+        for p in pesquisa_falha:
+            normalized.append({
+                'cracha': p.get('cracha'),
+                'nome': p.get('nome'),
+                'sucesso': p.get('sucesso', False),
+                'mensagem': p.get('mensagem', ''),
+                'dataDesligamento': p.get('dataDesligamento')
+            })
+        file_path = os.path.join(app_root, 'static', log_file_name)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(normalized, f, indent=2, ensure_ascii=False)
+        falha_file_name = log_file_name
+
+    if crachas_sucesso:
+        if isinstance(comandos_obj, list):
+            cmds_dict = {c: True for c in comandos_obj}
+        elif isinstance(comandos_obj, dict):
+            cmds_dict = comandos_obj
+        else:
+            cmds_dict = {'Comando': True}
+
+        cabecalho = generate_cabecalho_arquivo(relogio_list, cmds_dict)
+        sucesso_file_name = f'sucesso_agendamento_{job.id}.pdf'
+        sucesso_content = [f"Crachá: {c.get('cracha')}, Nome: {c.get('nome')}" for c in crachas_sucesso]
+        pdf_path = os.path.join(app_root, 'static', sucesso_file_name)
+        generate_pdf_report(pdf_path, cabecalho, sucesso_content)
+        sucesso_file_name = sucesso_file_name
+
+    return sucesso_file_name, falha_file_name
+
+# Iniciar thread do worker de agendamento em segundo plano
+try:
+    agendamento_worker_thread = threading.Thread(target=process_scheduled_commands_worker, daemon=True)
+    agendamento_worker_thread.start()
+except Exception as t_err:
+    print(f"Erro ao iniciar thread de agendamento: {t_err}")
+
+@app.route('/api/agendamento_comandos/criar', methods=['POST'])
+@permission_required('envio_comando')
+def api_agendamento_comandos_criar():
+    try:
+        if request.is_json:
+            data = request.json
+            data_hora_str = data.get('data_hora_execucao')
+            comandos_val = data.get('comandos', {})
+            comandos_str = json.dumps(comandos_val) if isinstance(comandos_val, dict) else str(comandos_val)
+            relogios_val = data.get('relogios', [])
+            relogios_str = json.dumps(relogios_val) if isinstance(relogios_val, list) else str(relogios_val)
+            matriculas_val = data.get('matriculas', [])
+            if isinstance(matriculas_val, list):
+                funcionarios = [int(m) for m in matriculas_val if str(m).isdigit()]
+            else:
+                try:
+                    m_list = json.loads(matriculas_val)
+                    funcionarios = [int(m) for m in m_list if str(m).isdigit()]
+                except Exception:
+                    funcionarios = []
+        else:
+            data_hora_str = request.form.get('data_hora_execucao')
+            comandos_str = request.form.get('comandos', '{}')
+            relogios_str = request.form.get('relogios', '[]')
+            matriculas_str = request.form.get('matriculas', '')
+
+            funcionarios = []
+            if matriculas_str:
+                matriculas_list = json.loads(matriculas_str)
+                funcionarios = [int(m) for m in matriculas_list if str(m).isdigit()]
+            elif 'arquivo' in request.files:
+                file = request.files['arquivo']
+                if file.filename != '':
+                    content = file.read().decode('utf-8')
+                    linhas = content.split('\n')
+                    for linha in linhas:
+                        linha = linha.strip()
+                        if linha and linha.isdigit():
+                            funcionarios.append(int(linha))
+
+        if not data_hora_str:
+            return jsonify({'sucesso': False, 'mensagem': 'Data e hora são obrigatórias.'}), 400
+
+        try:
+            dt_exec = datetime.datetime.fromisoformat(data_hora_str)
+        except ValueError:
+            return jsonify({'sucesso': False, 'mensagem': 'Formato de data e hora inválido.'}), 400
+
+        if not funcionarios:
+            return jsonify({'sucesso': False, 'mensagem': 'Nenhuma matrícula válida informada.'}), 400
+
+        db = get_db_session()
+        novo_agendamento = AgendamentoComando(
+            usuario=session.get('username', 'Admin'),
+            data_hora_execucao=dt_exec,
+            comandos=comandos_str,
+            matriculas=json.dumps(funcionarios),
+            relogios=relogios_str,
+            status='Pendente'
+        )
+        db.add(novo_agendamento)
+        db.commit()
+        log_action(f"Criou agendamento #{novo_agendamento.id} de comandos para {dt_exec.strftime('%d/%m/%Y %H:%M')}")
+        db.close()
+
+        return jsonify({'sucesso': True, 'mensagem': 'Agendamento registrado com sucesso.'})
+    except Exception as e:
+        return jsonify({'sucesso': False, 'mensagem': f'Erro ao salvar agendamento: {str(e)}'}), 500
+
+@app.route('/api/agendamento_comandos/criar_por_local', methods=['POST'])
+@permission_required('envio_comando')
+def api_agendamento_comandos_criar_por_local():
+    try:
+        data = request.json
+        location = data.get('location')
+        crachas = data.get('crachas', [])
+        data_hora_str = data.get('data_hora_execucao')
+
+        if not location or not crachas:
+            return jsonify({'sucesso': False, 'mensagem': 'Local e lista de crachás são obrigatórios.'}), 400
+
+        if not data_hora_str:
+            return jsonify({'sucesso': False, 'mensagem': 'Data e hora são obrigatórias.'}), 400
+
+        try:
+            dt_exec = datetime.datetime.fromisoformat(data_hora_str)
+        except ValueError:
+            return jsonify({'sucesso': False, 'mensagem': 'Formato de data e hora inválido.'}), 400
+
+        clock_ids = CLOCK_GROUPS.get(location, [])
+        if not clock_ids:
+            return jsonify({'sucesso': False, 'mensagem': f'Local {location} não encontrado nos grupos de relógios.'}), 400
+
+        comandos_dict = {
+            'EnviarListaCredenciais': True,
+            'EnviarListaTemplate': True
+        }
+
+        db = get_db_session()
+        novo_agendamento = AgendamentoComando(
+            usuario=session.get('username', 'Admin'),
+            data_hora_execucao=dt_exec,
+            comandos=json.dumps(comandos_dict),
+            matriculas=json.dumps(crachas),
+            relogios=json.dumps(clock_ids),
+            status='Pendente'
+        )
+        db.add(novo_agendamento)
+        db.commit()
+        log_action(f"Criou agendamento #{novo_agendamento.id} de comandos para local {location}")
+        db.close()
+
+        return jsonify({'sucesso': True, 'mensagem': f'Agendamento registrado com sucesso para o local {location}.'})
+    except Exception as e:
+        return jsonify({'sucesso': False, 'mensagem': f'Erro ao salvar agendamento: {str(e)}'}), 500
+
+@app.route('/api/agendamento_comandos/listar', methods=['GET'])
+@permission_required('envio_comando')
+def api_agendamento_comandos_listar():
+    db = get_db_session()
+    try:
+        agendamentos = db.query(AgendamentoComando).order_by(AgendamentoComando.data_hora_execucao.desc()).all()
+        lista = []
+        for a in agendamentos:
+            try:
+                cmds_dict = json.loads(a.comandos)
+                cmds_names = [k for k, v in cmds_dict.items() if v]
+                cmds_str = ", ".join(cmds_names) if cmds_names else "-"
+            except Exception:
+                cmds_str = a.comandos
+
+            try:
+                mats = json.loads(a.matriculas)
+                qtd_mats = len(mats)
+            except Exception:
+                qtd_mats = 0
+
+            try:
+                rels = json.loads(a.relogios)
+                qtd_rels = len(rels)
+            except Exception:
+                qtd_rels = 0
+
+            lista.append({
+                'id': a.id,
+                'usuario': a.usuario,
+                'data_hora_execucao': a.data_hora_execucao.strftime('%d/%m/%Y %H:%M'),
+                'comandos_str': cmds_str,
+                'qtd_matriculas': qtd_mats,
+                'qtd_relogios': qtd_rels,
+                'status': a.status,
+                'resultado': a.resultado,
+                'sucesso_file': a.sucesso_file,
+                'falha_file': a.falha_file,
+                'created_at': a.created_at.strftime('%d/%m/%Y %H:%M') if a.created_at else ''
+            })
+
+        return jsonify({'sucesso': True, 'agendamentos': lista})
+    finally:
+        db.close()
+
+@app.route('/api/agendamento_comandos/remover/<int:id>', methods=['POST'])
+@permission_required('envio_comando')
+def api_agendamento_comandos_remover(id):
+    db = get_db_session()
+    try:
+        agendamento = db.query(AgendamentoComando).get(id)
+        if not agendamento:
+            return jsonify({'sucesso': False, 'mensagem': 'Agendamento não encontrado.'}), 404
+
+        if agendamento.status != 'Pendente':
+            return jsonify({'sucesso': False, 'mensagem': 'Apenas agendamentos com status Pendente podem ser removidos.'}), 400
+
+        db.delete(agendamento)
+        db.commit()
+        log_action(f"Removeu agendamento #{id} de comandos")
+        return jsonify({'sucesso': True, 'mensagem': 'Agendamento removido com sucesso.'})
+    finally:
+        db.close()
+
+@app.route('/api/agendamento_comandos/gerar_arquivos/<int:id>', methods=['POST'])
+@permission_required('envio_comando')
+def api_agendamento_comandos_gerar_arquivos(id):
+    db = get_db_session()
+    try:
+        job = db.query(AgendamentoComando).get(id)
+        if not job:
+            return jsonify({'sucesso': False, 'mensagem': 'Agendamento não encontrado.'}), 404
+
+        static_dir = os.path.join(app.root_path, 'static')
+        sucesso_exists = job.sucesso_file and os.path.exists(os.path.join(static_dir, job.sucesso_file))
+        falha_exists = job.falha_file and os.path.exists(os.path.join(static_dir, job.falha_file))
+
+        if sucesso_exists or falha_exists:
+            return jsonify({
+                'sucesso': True,
+                'sucesso_file': job.sucesso_file if sucesso_exists else None,
+                'falha_file': job.falha_file if falha_exists else None,
+                'mensagem': 'Arquivos já gerados.'
+            })
+
+        try:
+            comandos_obj = json.loads(job.comandos)
+            relogio_list = json.loads(job.relogios)
+            matriculas_list = json.loads(job.matriculas)
+            funcionarios = [int(m) for m in matriculas_list if str(m).isdigit()]
+        except Exception as err:
+            return jsonify({'sucesso': False, 'mensagem': f'Erro ao ler dados do agendamento: {err}'}), 400
+
+        pesquisa_falha = []
+        crachas_sucesso = []
+
+        for cracha in funcionarios:
+            result = fetch_cracha(cracha)
+            if not result.get('sucesso'):
+                pesquisa_falha.append(result)
+            else:
+                crachas_sucesso.append(result)
+                if result.get('semTemplates'):
+                    pesquisa_falha.append({
+                        'cracha': result.get('cracha'),
+                        'nome': result.get('nome'),
+                        'sucesso': False,
+                        'mensagem': result.get('mensagem', 'Não possui Biometria')
+                    })
+
+        sucesso_file, falha_file = generate_reports_for_job(job, pesquisa_falha, crachas_sucesso, comandos_obj, relogio_list, app.root_path)
+        job.sucesso_file = sucesso_file
+        job.falha_file = falha_file
+        db.commit()
+
+        return jsonify({
+            'sucesso': True,
+            'sucesso_file': job.sucesso_file,
+            'falha_file': job.falha_file,
+            'mensagem': 'Arquivos gerados com sucesso.'
+        })
+    except Exception as e:
+        return jsonify({'sucesso': False, 'mensagem': f'Erro ao gerar arquivos: {str(e)}'}), 500
+    finally:
+        db.close()
 
 @app.route('/api/envio_comando/associar', methods=['POST'])
 @permission_required('envio_comando')

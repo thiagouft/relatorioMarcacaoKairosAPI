@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agendamento de Comandos - Kairos CPRT</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/envio_comando.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&family=Roboto:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    {% set active_page = 'agendamento_comandos' %}
+    {% include 'navbar.html' %}
+
+    <div class="container" style="flex-direction: column; gap: 1rem;">
+
+        <div class="command-home">
+            <!-- Painel esquerdo: Agendamento e Comandos -->
+            <div class="panel left-panel" id="panel-agendamento">
+                <h2>Agendamento de Comandos</h2>
+                <form id="agendamentoForm">
+                    <div class="form-group">
+                        <label for="data_hora_execucao"><strong>Data e Hora da Execução:</strong></label>
+                        <input type="datetime-local" id="data_hora_execucao" name="data_hora_execucao" required style="width: 100%; padding: 0.6rem; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 1rem; margin-top: 0.3rem;" />
+                    </div>
+
+                    <div class="form-group" style="margin-top: 1rem;">
+                        <label for="arquivo">Escolha o arquivo (.txt):</label>
+                        <input type="file" id="arquivo" name="arquivo" accept=".txt" />
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="matriculas">Ou digite as matrículas (separadas por vírgula):</label>
+                        <textarea id="matriculas" name="matriculas" placeholder="Ex: 12345,67890,11223" rows="3"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Selecione os comandos:</label>
+                        <div class="checkbox-group">
+                            <h4>Comando de envio de funcionários</h4>
+                            <label>
+                                <input type="checkbox" name="comandos" value="EnviarListaCredenciais" />
+                                Enviar Lista de Funcionários / Credenciais
+                            </label>
+                            <label>
+                                <input type="checkbox" name="comandos" value="EnviarListaTemplate" />
+                                Enviar Lista de Templates
+                            </label>
+                            <h4>Comando de exclusão de funcionários</h4>
+                            <label>
+                                <input type="checkbox" name="comandos" value="ExcluirListaCredenciais" />
+                                Excluir Lista de Credenciais
+                            </label>
+                            <label>
+                                <input type="checkbox" name="comandos" value="ExcluirListaPessoas" />
+                                Excluir Lista de Pessoas
+                            </label>
+                            <label>
+                                <input type="checkbox" name="comandos" value="ExcluirListaTemplates" />
+                                Excluir Lista de Templates
+                            </label>
+                            <h4>Comando de coleta de biometria</h4>
+                            <label>
+                                <input type="checkbox" name="comandos" value="BuscarListaTemplatesRelogioPessoa" />
+                                Buscar Templates (Parcial)
+                            </label>
+                            <label>
+                                <input type="checkbox" name="comandos" value="BuscarListaTemplatesRelogioPessoaTotal" />
+                                Buscar Templates (Total)
+                            </label>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" style="margin-top: 1rem; width: 100%;">
+                        📅 Salvar Agendamento
+                    </button>
+                </form>
+
+                <!-- Mensagem de Resultado -->
+                <div id="result" style="display: none; margin-top: 1rem;" class="card"></div>
+            </div>
+
+            <!-- Painel direito: Relógios -->
+            <div class="panel right-panel" id="panel-agendamento-relogios">
+                <h2>Selecione os Relógios</h2>
+                <div class="selection-buttons-container">
+                    <button id="selectAllRelogios" class="btn btn-primary btn-select-all">Selecionar Todos</button>
+                    <button id="deselectAllRelogios" class="btn btn-deselect-all">Deselecionar Todos</button>
+                </div>
+                <div id="relogios" class="checkbox-group">
+                    <!-- Relógios serão carregados aqui via JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="container footer-content">
+            <img src="{{ url_for('static', filename='images/mixestec_logo.png') }}" alt="Mixestec Logo" class="footer-logo">
+            <p>Desenvolvido por Thiago Silva Pereira</p>
+        </div>
+    </footer>
+
+    <!-- Pass grouping definition to frontend via global window variable -->
+    <script>
+        window.gruposRelogios = {
+            "P10": [1, 11, 23, 29],
+            "COCA": [3, 14, 31],
+            "CANTEIRO III": [18, 22, 24, 25],
+            "PIPE MARABA": [5, 9, 20],
+            "OFICINA II": [8],
+            "PIPE SAO FELIX": [2, 4, 10, 19, 21, 28],
+            "TREINAMENTO": [16],
+            "MUTRAN CANTEIRO IV": [13, 17],
+            "TERRAPLENAGEM III": [6, 12],
+            "TENDA MOTORISTAS III": [26],
+            "NAUTICA": [30],
+            "PI SAO FELIX": [33, 34],
+            "CENTRAL DE CONCRETO III": [7, 15],
+            "P12": [27, 32]
+        };
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const gruposRelogios = window.gruposRelogios || {};
+
+            async function fetchRelogios() {
+                const relogiosDiv = document.getElementById("relogios");
+                relogiosDiv.innerHTML = "<em>Carregando relógios...</em>";
+
+                try {
+                    const response = await fetch("/api/envio_comando/relogios");
+                    if (!response.ok) throw new Error("Falha ao buscar relógios.");
+                    const relogios = await response.json();
+
+                    relogiosDiv.innerHTML = "";
+
+                    const gruposDiv = document.createElement("div");
+                    gruposDiv.className = "grupos-relogios";
+
+                    Object.entries(gruposRelogios).forEach(([grupo, ids]) => {
+                        const label = document.createElement("label");
+                        label.style.fontWeight = "bold";
+                        const checkbox = document.createElement("input");
+                        checkbox.type = "checkbox";
+                        checkbox.className = "grupo-relogio-checkbox";
+                        checkbox.dataset.grupo = grupo;
+
+                        label.appendChild(checkbox);
+                        label.appendChild(document.createTextNode(` Selecionar grupo: ${grupo}`));
+                        gruposDiv.appendChild(label);
+
+                        checkbox.addEventListener("change", function () {
+                            relogios.forEach((relogio) => {
+                                if (ids.includes(relogio.RelogioNumero)) {
+                                    const cb = relogiosDiv.querySelector(
+                                        `input[name='relogios'][value='${relogio.RelogioNumero}']`
+                                    );
+                                    if (cb) cb.checked = this.checked;
+                                }
+                            });
+                        });
+                    });
+
+                    relogiosDiv.parentNode.insertBefore(gruposDiv, relogiosDiv);
+
+                    relogios.forEach((relogio) => {
+                        const label = document.createElement("label");
+                        const checkbox = document.createElement("input");
+                        checkbox.type = "checkbox";
+                        checkbox.name = "relogios";
+                        checkbox.value = relogio.RelogioNumero;
+
+                        label.appendChild(checkbox);
+                        label.appendChild(
+                            document.createTextNode(` ${relogio.RelogioNumero} - ${relogio.RelogioNome}`)
+                        );
+                        relogiosDiv.appendChild(label);
+                    });
+                } catch (error) {
+                    console.error("Erro ao buscar relógios:", error);
+                    relogiosDiv.innerHTML = `<span class="error">Falha ao carregar a lista de relógios.</span>`;
+                }
+            }
+
+            document.getElementById("selectAllRelogios").addEventListener("click", () => {
+                const checkboxes = document.querySelectorAll('input[name="relogios"]');
+                checkboxes.forEach((checkbox) => { checkbox.checked = true; });
+            });
+
+            document.getElementById("deselectAllRelogios").addEventListener("click", () => {
+                const checkboxes = document.querySelectorAll('input[name="relogios"]');
+                checkboxes.forEach((checkbox) => { checkbox.checked = false; });
+                const grupoCheckboxes = document.querySelectorAll('.grupo-relogio-checkbox');
+                grupoCheckboxes.forEach((cb) => { cb.checked = false; });
+            });
+
+            fetchRelogios();
+
+            // Submit handler do form de agendamento
+            document.getElementById("agendamentoForm").addEventListener("submit", async (e) => {
+                e.preventDefault();
+
+                const dataHoraInput = document.getElementById("data_hora_execucao").value;
+                if (!dataHoraInput) {
+                    alert("Por favor, selecione a data e hora para execução do agendamento!");
+                    return;
+                }
+
+                const fileInput = document.getElementById("arquivo");
+                const matriculasInput = document.getElementById("matriculas").value.trim();
+                const resultDiv = document.getElementById("result");
+
+                resultDiv.innerHTML = "";
+                resultDiv.style.display = "none";
+
+                const formData = new FormData();
+                formData.append("data_hora_execucao", dataHoraInput);
+
+                if (fileInput.files.length > 0) {
+                    formData.append("arquivo", fileInput.files[0]);
+                } else if (matriculasInput.length > 0) {
+                    const matriculas = matriculasInput
+                        .split(",")
+                        .map((m) => m.trim())
+                        .filter((m) => m !== "");
+
+                    if (matriculas.length === 0) {
+                        alert("Por favor, digite pelo menos uma matrícula válida!");
+                        return;
+                    }
+                    formData.append("matriculas", JSON.stringify(matriculas));
+                } else {
+                    alert("Por favor, selecione um arquivo de matrículas ou digite as matrículas!");
+                    return;
+                }
+
+                const comandos = {};
+                const checkboxesComandos = document.querySelectorAll('input[name="comandos"]:checked');
+                if (checkboxesComandos.length === 0) {
+                    alert("Por favor, selecione pelo menos um comando!");
+                    return;
+                }
+                checkboxesComandos.forEach((checkbox) => {
+                    comandos[checkbox.value] = true;
+                });
+
+                const relogios = [];
+                const checkboxesRelogios = document.querySelectorAll('input[name="relogios"]:checked');
+                if (checkboxesRelogios.length === 0) {
+                    alert("Por favor, selecione pelo menos um relógio!");
+                    return;
+                }
+                checkboxesRelogios.forEach((checkbox) => {
+                    relogios.push(parseInt(checkbox.value, 10));
+                });
+
+                formData.append("comandos", JSON.stringify(comandos));
+                formData.append("relogios", JSON.stringify(relogios));
+
+                const submitBtn = e.target.querySelector('button[type="submit"]');
+                submitBtn.disabled = true;
+                submitBtn.textContent = "Gravando agendamento...";
+
+                try {
+                    const response = await fetch("/api/agendamento_comandos/criar", {
+                        method: "POST",
+                        body: formData,
+                    });
+
+                    const result = await response.json();
+                    resultDiv.style.display = "block";
+
+                    if (result.sucesso) {
+                        resultDiv.innerHTML = `
+                            <p class="success" style="color: #276749; background-color: #c6f6d5; padding: 0.75rem; border-radius: 6px; font-weight: 500;">
+                                ✅ ${result.mensagem}
+                            </p>
+                        `;
+                        e.target.reset();
+                        document.querySelectorAll('input[name="relogios"]').forEach(cb => cb.checked = false);
+                        document.querySelectorAll('.grupo-relogio-checkbox').forEach(cb => cb.checked = false);
+                    } else {
+                        resultDiv.innerHTML = `<p class="error" style="color: #9b2c2c; background-color: #fed7d7; padding: 0.75rem; border-radius: 6px;">❌ ${result.mensagem}</p>`;
+                    }
+                } catch (error) {
+                    resultDiv.style.display = "block";
+                    resultDiv.innerHTML = `<p class="error" style="color: #9b2c2c; background-color: #fed7d7; padding: 0.75rem; border-radius: 6px;">Erro de conexão: ${error.message}</p>`;
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = "📅 Salvar Agendamento";
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

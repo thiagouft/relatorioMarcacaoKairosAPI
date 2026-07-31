@@ -34,7 +34,7 @@
                 <!-- 2. Comandos do Relógio -->
                 {% if is_admin or permissions.envio_comando or permissions.admin_locais_ponto %}
                 <div class="dropdown">
-                    <button class="dropbtn" {% if active_page in ['envio_comando', 'admin_locais_ponto'] %}style="font-weight: bold; border-bottom: 2px solid var(--accent-color);"{% endif %}>Comandos do Relógio</button>
+                    <button class="dropbtn" {% if active_page in ['envio_comando', 'admin_locais_ponto', 'agendamento_comandos', 'comandos_agendados'] %}style="font-weight: bold; border-bottom: 2px solid var(--accent-color);"{% endif %}>Comandos do Relógio</button>
                     <div class="dropdown-content">
                         {% if is_admin or permissions.envio_comando %}
                         <a href="{{ url_for('envio_comando') }}#envio">Envio de comando</a>
@@ -46,6 +46,8 @@
                         <a href="{{ url_for('envio_comando') }}#ponteiro">Reposição de Ponteiro</a>
                         <a href="{{ url_for('envio_comando') }}#datahora">Envio de Data e Hora</a>
                         <a href="{{ url_for('envio_comando') }}#desligamento">Envio de Desligamento</a>
+                        <a href="{{ url_for('agendamento_comandos') }}">Agendamento de Comandos</a>
+                        <a href="{{ url_for('comandos_agendados') }}">Comandos Agendados</a>
                         {% endif %}
                     </div>
                 </div>

@@ -137,6 +137,22 @@
                 <!-- JS will populate the results here -->
             </div>
         </div>
+
+        <!-- Modal de Agendamento por Local -->
+        <div id="modalAgendamentoLocal" class="modal" style="display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); align-items: center; justify-content: center;">
+            <div class="modal-content" style="background: white; padding: 2rem; border-radius: 10px; max-width: 450px; width: 90%; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+                <h3 style="margin-top: 0; color: #2d3748; font-size: 1.25rem;" id="tituloModalLocal">📅 Agendar Comando por Local</h3>
+                <p style="color: #4a5568; font-size: 0.9rem; margin-bottom: 1rem;">Escolha a data e hora para enviar credenciais e biometrias aos relógios deste local:</p>
+                <div style="margin: 1.5rem 0;">
+                    <label for="dataHoraLocalModal" style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #2d3748;">Data e Hora da Execução:</label>
+                    <input type="datetime-local" id="dataHoraLocalModal" style="width: 100%; padding: 0.6rem; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 1rem;" />
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+                    <button type="button" id="cancelarModalLocal" class="btn btn-secondary" style="background: #e2e8f0; color: #4a5568; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600;">Cancelar</button>
+                    <button type="button" id="confirmarModalLocal" class="btn btn-primary" style="padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600;">Confirmar Agendamento</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -304,15 +320,29 @@
 
                         groupDiv.appendChild(listDiv);
 
-                        // Add button for sending command
+                        // Container de botões (Enviar Agora + Agendar)
+                        const btnWrapper = document.createElement('div');
+                        btnWrapper.style.display = 'flex';
+                        btnWrapper.style.gap = '10px';
+                        btnWrapper.style.justifyContent = 'center';
+                        btnWrapper.style.marginTop = '15px';
+                        btnWrapper.style.flexWrap = 'wrap';
+
+                        // Botão Enviar Agora
                         const button = document.createElement('button');
-                        button.textContent = 'Enviar Comando (Credenciais + Templates)';
+                        button.textContent = '⚡ Enviar Comando Agora';
                         button.className = 'btn btn-primary';
-                        button.style.margin = '10px auto';
-                        button.style.display = 'block';
-                        button.style.width = 'fit-content';
                         button.onclick = () => enviarComandoParaLocal(grupo, crachas, button);
-                        groupDiv.appendChild(button);
+                        btnWrapper.appendChild(button);
+
+                        // Botão Agendar Comando
+                        const buttonAgendar = document.createElement('button');
+                        buttonAgendar.textContent = '📅 Agendar Comando';
+                        buttonAgendar.className = 'btn btn-warning';
+                        buttonAgendar.onclick = () => abrirModalAgendamentoLocal(grupo, crachas, groupDiv);
+                        btnWrapper.appendChild(buttonAgendar);
+
+                        groupDiv.appendChild(btnWrapper);
 
                         // Add result div for this group
                         const resultDiv = document.createElement('div');
@@ -379,9 +409,82 @@
             container.style.display = 'block';
         }
 
+        // Modal agendamento por local
+        let currentAgendamentoLocal = null;
+
+        function abrirModalAgendamentoLocal(grupo, crachas, groupDiv) {
+            currentAgendamentoLocal = { grupo, crachas, groupDiv };
+            document.getElementById('tituloModalLocal').textContent = `📅 Agendar Comando: ${grupo}`;
+            document.getElementById('modalAgendamentoLocal').style.display = 'flex';
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const btnCancelar = document.getElementById('cancelarModalLocal');
+            const btnConfirmar = document.getElementById('confirmarModalLocal');
+
+            if (btnCancelar) {
+                btnCancelar.addEventListener('click', () => {
+                    document.getElementById('modalAgendamentoLocal').style.display = 'none';
+                });
+            }
+
+            if (btnConfirmar) {
+                btnConfirmar.addEventListener('click', async () => {
+                    if (!currentAgendamentoLocal) return;
+
+                    const dataHoraVal = document.getElementById('dataHoraLocalModal').value;
+                    if (!dataHoraVal) {
+                        alert('Por favor, selecione a data e hora para o agendamento!');
+                        return;
+                    }
+
+                    const { grupo, crachas, groupDiv } = currentAgendamentoLocal;
+                    const resultDiv = groupDiv.querySelector('.command-result');
+                    resultDiv.style.display = 'block';
+                    resultDiv.innerHTML = 'Agendando...';
+
+                    btnConfirmar.disabled = true;
+                    btnConfirmar.textContent = 'Salvando...';
+
+                    try {
+                        const response = await fetch('/api/agendamento_comandos/criar_por_local', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                location: grupo,
+                                crachas: crachas,
+                                data_hora_execucao: dataHoraVal
+                            })
+                        });
+
+                        const res = await response.json();
+                        document.getElementById('modalAgendamentoLocal').style.display = 'none';
+
+                        if (res.sucesso) {
+                            resultDiv.innerHTML = `
+                                <p class="success" style="color: #276749; background-color: #c6f6d5; padding: 0.75rem; border-radius: 6px;">
+                                    ✅ ${res.mensagem} <br>
+                                    <a href="/comandos_agendados" style="color: #2b6cb0; font-weight: 600; text-decoration: underline;">👉 Ver Comandos Agendados</a>
+                                </p>
+                            `;
+                            alert(`Agendamento registrado com sucesso para o local ${grupo}!`);
+                        } else {
+                            resultDiv.innerHTML = `<p class="error">${res.mensagem}</p>`;
+                        }
+                    } catch (err) {
+                        document.getElementById('modalAgendamentoLocal').style.display = 'none';
+                        resultDiv.innerHTML = `<p class="error">Erro ao agendar: ${err.message}</p>`;
+                    } finally {
+                        btnConfirmar.disabled = false;
+                        btnConfirmar.textContent = 'Confirmar Agendamento';
+                    }
+                });
+            }
+        });
+
         // Function to send command for a specific location
         async function enviarComandoParaLocal(grupo, crachas, button) {
-            const resultDiv = button.nextElementSibling;
+            const resultDiv = button.parentElement.nextElementSibling;
             resultDiv.style.display = 'block';
             resultDiv.innerHTML = 'Processando...';
 
