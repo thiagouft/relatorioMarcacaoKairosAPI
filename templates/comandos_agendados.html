@@ -179,6 +179,37 @@
             
             // Auto-refresh a cada 30 segundos
             setInterval(carregarAgendamentos, 30000);
+
+            window.onclick = function (event) {
+                var deleteModal = document.getElementById('deleteConfirmModal');
+                if (event.target == deleteModal) {
+                    closeDeleteModal();
+                }
+            }
+
+            // Registrar escuta de clique de confirmação de exclusão
+            document.getElementById('btnConfirmDelete').addEventListener('click', async function() {
+                if (!agendamentoIdParaRemover) return;
+                
+                const id = agendamentoIdParaRemover;
+                closeDeleteModal();
+
+                try {
+                    const response = await fetch(`/api/agendamento_comandos/remover/${id}`, {
+                        method: 'POST'
+                    });
+                    const res = await response.json();
+                    if (res.sucesso) {
+                        showAlert('Agendamento removido com sucesso!', 'success');
+                        carregarAgendamentos();
+                    } else {
+                        showAlert(res.mensagem || 'Erro ao remover agendamento.', 'danger');
+                    }
+                } catch (err) {
+                    console.error('Erro ao remover agendamento:', err);
+                    showAlert('Erro ao enviar solicitação de remoção.', 'danger');
+                }
+            });
         });
 
         function showAlert(mensagem, tipo = 'success') {
@@ -247,27 +278,19 @@
             }
         }
 
-        async function removerAgendamento(id) {
-            if (!confirm('Deseja realmente remover este agendamento da lista? Ele não será executado.')) {
-                return;
-            }
+        let agendamentoIdParaRemover = null;
 
-            try {
-                const response = await fetch(`/api/agendamento_comandos/remover/${id}`, {
-                    method: 'POST'
-                });
-                const res = await response.json();
-                if (res.sucesso) {
-                    showAlert('Agendamento removido com sucesso!', 'success');
-                    carregarAgendamentos();
-                } else {
-                    showAlert(res.mensagem || 'Erro ao remover agendamento.', 'danger');
-                }
-            } catch (err) {
-                console.error('Erro ao remover agendamento:', err);
-                showAlert('Erro ao enviar solicitação de remoção.', 'danger');
-            }
+        function removerAgendamento(id) {
+            agendamentoIdParaRemover = id;
+            document.getElementById('deleteConfirmModal').style.display = 'block';
         }
+
+        function closeDeleteModal() {
+            document.getElementById('deleteConfirmModal').style.display = 'none';
+            agendamentoIdParaRemover = null;
+        }
+
+
 
         async function gerarArquivosAgendamento(id) {
             try {
@@ -288,6 +311,27 @@
             }
         }
     </script>
+    <!-- Modal de Confirmação de Exclusão -->
+    <div id="deleteConfirmModal" class="modal" style="display: none;">
+        <div class="modal-content card" style="max-width: 400px; text-align: center; padding: 2rem;">
+            <span class="close" onclick="closeDeleteModal()"
+                style="color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; margin-top: -15px; margin-right: -10px;">&times;</span>
+            <div style="font-size: 3rem; color: var(--error-red); margin-bottom: 1rem;">⚠️</div>
+            <h3 style="margin-top:0; color: #2d3748;">Excluir Agendamento</h3>
+            <p style="color: var(--text-gray); margin-bottom: 1.5rem; font-size: 0.95rem; line-height: 1.5;">
+                Deseja realmente remover este agendamento da lista? Ele não será executado.
+            </p>
+
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button type="button" class="btn" style="background-color: var(--border-gray); color: var(--dark-bg); flex: 1; padding: 10px;" onclick="closeDeleteModal()">
+                    Cancelar
+                </button>
+                <button type="button" class="btn btn-danger" style="flex: 1; padding: 10px; background-color: var(--error-red); color: white;" id="btnConfirmDelete">
+                    Sim, Remover
+                </button>
+            </div>
+        </div>
+    </div>
 </body>
 
 </html>

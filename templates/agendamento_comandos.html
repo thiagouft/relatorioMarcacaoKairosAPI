@@ -231,13 +231,13 @@
 
                 const dataHoraValBr = document.getElementById("data_hora_execucao").value.trim();
                 if (!dataHoraValBr) {
-                    alert("Por favor, digite a data e hora para execução do agendamento!");
+                    showToast("Por favor, digite a data e hora para execução do agendamento!", "warning");
                     return;
                 }
 
                 const dataHoraInput = convertBrToIso(dataHoraValBr);
                 if (!dataHoraInput) {
-                    alert("Formato de data e hora inválido! Por favor, use o formato DD/MM/AAAA HH:MM (ex: 31/07/2026 09:40).");
+                    showToast("Formato de data e hora inválido! Por favor, use o formato DD/MM/AAAA HH:MM (ex: 31/07/2026 09:40).", "warning");
                     return;
                 }
 
@@ -260,19 +260,19 @@
                         .filter((m) => m !== "");
 
                     if (matriculas.length === 0) {
-                        alert("Por favor, digite pelo menos uma matrícula válida!");
+                        showToast("Por favor, digite pelo menos uma matrícula válida!", "warning");
                         return;
                     }
                     formData.append("matriculas", JSON.stringify(matriculas));
                 } else {
-                    alert("Por favor, selecione um arquivo de matrículas ou digite as matrículas!");
+                    showToast("Por favor, selecione um arquivo de matrículas ou digite as matrículas!", "warning");
                     return;
                 }
 
                 const comandos = {};
                 const checkboxesComandos = document.querySelectorAll('input[name="comandos"]:checked');
                 if (checkboxesComandos.length === 0) {
-                    alert("Por favor, selecione pelo menos um comando!");
+                    showToast("Por favor, selecione pelo menos um comando!", "warning");
                     return;
                 }
                 checkboxesComandos.forEach((checkbox) => {
@@ -282,7 +282,7 @@
                 const relogios = [];
                 const checkboxesRelogios = document.querySelectorAll('input[name="relogios"]:checked');
                 if (checkboxesRelogios.length === 0) {
-                    alert("Por favor, selecione pelo menos um relógio!");
+                    showToast("Por favor, selecione pelo menos um relógio!", "warning");
                     return;
                 }
                 checkboxesRelogios.forEach((checkbox) => {

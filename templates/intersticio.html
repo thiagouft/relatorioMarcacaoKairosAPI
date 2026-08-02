@@ -114,10 +114,48 @@
                     <h3>Pessoas com Saída Tardia</h3>
                     <span id="results-count" class="badge" style="background-color: var(--primary-blue); color: white; padding: 5px 10px; border-radius: 4px; font-size: 0.9em; font-weight: 600; text-align: center; width: fit-content;">0 registros</span>
                 </div>
-                <div style="display: flex; gap: 10px; width: 100%; max-width: 480px;">
-                    <button id="btn-export" class="btn btn-success" style="flex: 1;">Exportar Excel</button>
-                    <button id="btn-export-pdf" class="btn btn-secondary" style="flex: 1;">Exportar PDF</button>
-                    <button id="btn-bloquear" class="btn btn-warning" style="flex: 1; background-color: var(--error-red); color: white; display: none;">Bloquear</button>
+                <div style="display: flex; gap: 10px; width: 100%; max-width: 680px; flex-wrap: wrap;">
+                    <button id="btn-export" class="btn btn-success" style="flex: 1; min-width: 110px;">Exportar Excel</button>
+                    <button id="btn-export-pdf" class="btn btn-secondary" style="flex: 1; min-width: 110px;">Exportar PDF</button>
+                    <div class="dropdown-colunas" style="position: relative; display: inline-block;">
+                        <button type="button" id="btn-config-colunas" class="btn" style="height: 38px; padding: 0 12px; font-size: 0.85rem; min-height: unset; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border-gray); background-color: var(--white); color: var(--dark-bg); border-radius: 6px; cursor: pointer;" title="Configurar Colunas">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                <line x1="9" y1="3" x2="9" y2="21"></line>
+                                <line x1="15" y1="3" x2="15" y2="21"></line>
+                            </svg>
+                            Colunas
+                        </button>
+                        <div id="dropdown-menu-colunas" style="display: none; position: absolute; right: 0; top: 42px; z-index: 1000; background-color: #FFFFFF; color: #1E293B; border: 1px solid var(--border-gray); border-radius: 8px; padding: 12px; width: 240px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); flex-direction: column; gap: 8px;">
+                            <div style="font-size: 0.78rem; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; border-bottom: 1px solid var(--border-gray); padding-bottom: 4px;">Exibir Colunas</div>
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                                <input type="checkbox" class="col-toggle-checkbox" value="Matricula" checked> Matrícula
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                                <input type="checkbox" class="col-toggle-checkbox" value="Nome" checked> Nome
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                                <input type="checkbox" class="col-toggle-checkbox" value="NomeFuncao" checked> Cargo / Função
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                                <input type="checkbox" class="col-toggle-checkbox" value="Secao" checked> Seção
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                                <input type="checkbox" class="col-toggle-checkbox" value="Gerencia" checked> Gerência
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                                <input type="checkbox" class="col-toggle-checkbox" value="Local" checked> Local Registro
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                                <input type="checkbox" class="col-toggle-checkbox" value="DataFormatada" checked> Data Saída
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                                <input type="checkbox" class="col-toggle-checkbox" value="HoraFormatada" checked> Hora Saída
+                            </label>
+                        </div>
+                    </div>
+                    <button id="btn-bloquear" class="btn btn-warning" style="flex: 1; background-color: var(--error-red); color: white; display: none; min-width: 100px;">Bloquear</button>
+                    <button id="btn-desbloquear" class="btn btn-primary" style="flex: 1; background-color: var(--primary-blue); color: white; display: none; min-width: 160px;">Agendar Desbloqueio</button>
                 </div>
             </div>
 
@@ -127,14 +165,14 @@
                 <table id="data-table">
                     <thead>
                         <tr>
-                            <th>Matrícula</th>
-                            <th>Nome</th>
-                            <th>Cargo / Função</th>
-                            <th>Seção</th>
-                            <th>Gerência</th>
-                            <th>Local Registro</th>
-                            <th>Data Saída</th>
-                            <th>Hora Saída</th>
+                            <th class="col-Matricula">Matrícula</th>
+                            <th class="col-Nome">Nome</th>
+                            <th class="col-NomeFuncao">Cargo / Função</th>
+                            <th class="col-Secao">Seção</th>
+                            <th class="col-Gerencia">Gerência</th>
+                            <th class="col-Local">Local Registro</th>
+                            <th class="col-DataFormatada">Data Saída</th>
+                            <th class="col-HoraFormatada">Hora Saída</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -201,8 +239,129 @@
         </div>
     </div>
 
+    <!-- Modal de Desbloqueio -->
+    <div id="unblockModal" class="modal" style="display: none;">
+        <div class="modal-content card" style="max-width: 750px; width: 95%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 style="margin: 0; color: var(--primary-blue);">Agendar Desbloqueio dos Funcionários nos Relógios</h3>
+                <span class="close" id="close-unblock-modal" style="cursor: pointer; font-size: 1.5em; font-weight: bold;">&times;</span>
+            </div>
+            <p style="color: var(--text-gray); margin-bottom: 15px;">
+                Selecione os funcionários para os quais deseja agendar o desbloqueio. O sistema calculará automaticamente o horário de 11h de descanso após o último ponto do colaborador (arredondado de 5 em 5 minutos para cima) e agendará comandos de liberação de credenciais e biometrias para todos os relógios em que o funcionário registrou ponto no último mês.
+            </p>
+            
+            <!-- Barra de Selecionar Todos -->
+            <div style="margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">
+                <label style="font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="select-all-unblock" checked> Selecionar Todos
+                </label>
+                <span id="selected-unblock-count" class="badge" style="background-color: var(--primary-blue); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em;">0 selecionados</span>
+            </div>
+
+            <!-- Tabela de Funcionários no Modal -->
+            <div class="modal-table-container" style="max-height: 250px; overflow-y: auto; border: 1px solid var(--border-gray); border-radius: 4px; margin-bottom: 20px;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead style="position: sticky; top: 0; background-color: var(--light-bg); z-index: 1;">
+                        <tr>
+                            <th style="width: 40px; padding: 8px; border-bottom: 1px solid var(--border-gray);"></th>
+                            <th style="padding: 8px; border-bottom: 1px solid var(--border-gray); text-align: left;">Matrícula</th>
+                            <th style="padding: 8px; border-bottom: 1px solid var(--border-gray); text-align: left;">Nome</th>
+                            <th style="padding: 8px; border-bottom: 1px solid var(--border-gray); text-align: left;">Data Saída</th>
+                            <th style="padding: 8px; border-bottom: 1px solid var(--border-gray); text-align: left;">Hora Saída</th>
+                            <th style="padding: 8px; border-bottom: 1px solid var(--border-gray); text-align: left;">Horário Desbloqueio (Calculado)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="unblock-table-body">
+                        <!-- Carregado via JS -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Loading inside modal -->
+            <div id="unblock-loading" style="display: none; text-align: center; padding: 20px; color: var(--text-gray);">
+                <div class="spinner"></div>
+                Pesquisando locais de ponto e agendando desbloqueio no servidor. Por favor, aguarde...
+            </div>
+
+            <!-- Resultados do Envio -->
+            <div id="unblock-result" style="display: none; margin-bottom: 20px; padding: 15px; border-radius: 4px; border: 1px solid var(--border-gray);" class="card">
+                <!-- Links de download e mensagens de sucesso/falha -->
+            </div>
+
+            <!-- Footer / Ações -->
+            <div style="display: flex; justify-content: flex-end; gap: 10px;" id="unblock-modal-actions">
+                <button id="btn-cancel-unblock" class="btn" style="background-color: var(--border-gray); color: var(--dark-bg);">Cancelar</button>
+                <button id="btn-confirm-unblock" class="btn btn-primary" style="background-color: var(--primary-blue); color: white;">Agendar Desbloqueio</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let currentData = [];
+        const storageKeyIntersticio = 'intersticio_active_columns';
+        const defaultColumnsIntersticio = ['Matricula', 'Nome', 'NomeFuncao', 'Secao', 'Gerencia', 'Local', 'DataFormatada', 'HoraFormatada'];
+
+        const loadIntersticioActiveColumns = () => {
+            const stored = JSON.parse(localStorage.getItem(storageKeyIntersticio));
+            if (Array.isArray(stored) && stored.length > 0) {
+                return stored;
+            }
+            return defaultColumnsIntersticio.slice();
+        };
+
+        const markIntersticioCheckboxes = () => {
+            const activeCols = loadIntersticioActiveColumns();
+            document.querySelectorAll('.col-toggle-checkbox').forEach(cb => {
+                cb.checked = activeCols.includes(cb.value);
+            });
+        };
+
+        const updateIntersticioColumnsVisibility = () => {
+            const activeCols = [];
+            document.querySelectorAll('.col-toggle-checkbox').forEach(cb => {
+                const visible = cb.checked;
+                if (visible) {
+                    activeCols.push(cb.value);
+                }
+                document.querySelectorAll(`.col-${cb.value}`).forEach(cell => {
+                    cell.style.display = visible ? '' : 'none';
+                });
+            });
+            localStorage.setItem(storageKeyIntersticio, JSON.stringify(activeCols));
+        };
+
+        const setupIntersticioColumnDropdown = () => {
+            const btnConfig = document.getElementById('btn-config-colunas');
+            const dropdownMenu = document.getElementById('dropdown-menu-colunas');
+            btnConfig.addEventListener('click', (e) => {
+                e.stopPropagation();
+                dropdownMenu.style.display = dropdownMenu.style.display === 'flex' ? 'none' : 'flex';
+            });
+            document.addEventListener('click', (e) => {
+                if (!btnConfig.contains(e.target) && !dropdownMenu.contains(e.target)) {
+                    dropdownMenu.style.display = 'none';
+                }
+            });
+            document.querySelectorAll('.col-toggle-checkbox').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    updateIntersticioColumnsVisibility();
+                });
+            });
+        };
+
+        const obterRegistrosFiltrados = () => {
+            const activeCols = loadIntersticioActiveColumns();
+            if (!activeCols.length) {
+                return [];
+            }
+            return currentData.map(item => {
+                const filtered = {};
+                activeCols.forEach(col => {
+                    filtered[col] = item[col] != null ? item[col] : '';
+                });
+                return filtered;
+            });
+        };
 
         document.getElementById('btn-calculate').addEventListener('click', async () => {
             const dateInput = document.getElementById('date').value;
@@ -218,6 +377,7 @@
             tbody.innerHTML = '';
             tableContainer.style.display = 'none';
             document.getElementById('btn-bloquear').style.display = 'none';
+            document.getElementById('btn-desbloquear').style.display = 'none';
             currentData = [];
 
             if (!dateInput) {
@@ -254,19 +414,21 @@
                     currentData.forEach(item => {
                         const tr = document.createElement('tr');
                         tr.innerHTML = `
-                            <td><strong>${item.Matricula}</strong></td>
-                            <td style="text-transform: capitalize;">${item.Nome}</td>
-                            <td>${item.NomeFuncao || '<span style="color: var(--text-gray); font-style: italic;">Não informado</span>'}</td>
-                            <td>${item.Secao || '<span style="color: var(--text-gray); font-style: italic;">Não informado</span>'}</td>
-                            <td>${item.Gerencia || '<span style="color: var(--text-gray); font-style: italic;">Não informado</span>'}</td>
-                            <td>${item.Local || '<span style="color: var(--text-gray); font-style: italic;">-</span>'}</td>
-                            <td>${item.DataFormatada}</td>
-                            <td><span style="color: var(--error-red); font-weight: 600;">${item.HoraFormatada}</span></td>
+                            <td class="col-Matricula"><strong>${item.Matricula}</strong></td>
+                            <td class="col-Nome" style="text-transform: capitalize;">${item.Nome}</td>
+                            <td class="col-NomeFuncao">${item.NomeFuncao || '<span style="color: var(--text-gray); font-style: italic;">Não informado</span>'}</td>
+                            <td class="col-Secao">${item.Secao || '<span style="color: var(--text-gray); font-style: italic;">Não informado</span>'}</td>
+                            <td class="col-Gerencia">${item.Gerencia || '<span style="color: var(--text-gray); font-style: italic;">Não informado</span>'}</td>
+                            <td class="col-Local">${item.Local || '<span style="color: var(--text-gray); font-style: italic;">-</span>'}</td>
+                            <td class="col-DataFormatada">${item.DataFormatada}</td>
+                            <td class="col-HoraFormatada"><span style="color: var(--error-red); font-weight: 600;">${item.HoraFormatada}</span></td>
                         `;
                         tbody.appendChild(tr);
                     });
                     document.getElementById('btn-bloquear').style.display = 'inline-block';
+                    document.getElementById('btn-desbloquear').style.display = 'inline-block';
                 }
+                updateIntersticioColumnsVisibility();
                 tableContainer.style.display = 'block';
 
             } catch (error) {
@@ -280,15 +442,20 @@
 
         document.getElementById('btn-export').addEventListener('click', async () => {
             if (currentData.length === 0) {
-                alert('Sem dados para exportar.');
+                showToast('Sem dados para exportar.', 'warning');
                 return;
             }
 
             try {
+                const records = obterRegistrosFiltrados();
+                if (!records.length) {
+                    showToast('Selecione ao menos uma coluna para exportar.', 'warning');
+                    return;
+                }
                 const response = await fetch('/api/export', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ records: currentData })
+                    body: JSON.stringify({ records })
                 });
 
                 if (response.ok) {
@@ -301,25 +468,30 @@
                     a.click();
                     a.remove();
                 } else {
-                    alert('Erro ao exportar arquivo.');
+                    showToast('Erro ao exportar arquivo.', 'danger');
                 }
             } catch (error) {
                 console.error('Erro:', error);
-                alert('Erro ao exportar arquivo.');
+                showToast('Erro ao exportar arquivo.', 'danger');
             }
         });
 
         document.getElementById('btn-export-pdf').addEventListener('click', async () => {
             if (currentData.length === 0) {
-                alert('Sem dados para exportar.');
+                showToast('Sem dados para exportar.', 'warning');
                 return;
             }
 
             try {
+                const records = obterRegistrosFiltrados();
+                if (!records.length) {
+                    showToast('Selecione ao menos uma coluna para exportar.', 'warning');
+                    return;
+                }
                 const response = await fetch('/api/export-pdf', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ records: currentData })
+                    body: JSON.stringify({ records })
                 });
 
                 if (response.ok) {
@@ -332,13 +504,18 @@
                     a.click();
                     a.remove();
                 } else {
-                    alert('Erro ao exportar PDF.');
+                    showToast('Erro ao exportar PDF.', 'danger');
                 }
             } catch (error) {
                 console.error('Erro:', error);
-                alert('Erro ao exportar PDF.');
+                showToast('Erro ao exportar PDF.', 'danger');
             }
         });
+
+        // Inicializa o estado de colunas e o menu de configuração
+        markIntersticioCheckboxes();
+        setupIntersticioColumnDropdown();
+        updateIntersticioColumnsVisibility();
 
         // --- Lógica do Modal de Bloqueio ---
         function updateSelectedCount() {
@@ -363,7 +540,7 @@
             modalTbody.innerHTML = '';
             
             if (currentData.length === 0) {
-                alert('Nenhum funcionário disponível para bloqueio.');
+                showToast('Nenhum funcionário disponível para bloqueio.', 'warning');
                 return;
             }
             
@@ -422,7 +599,7 @@
             const matriculas = Array.from(checkedCheckboxes).map(cb => cb.getAttribute('data-matricula'));
             
             if (matriculas.length === 0) {
-                alert('Por favor, selecione pelo menos um funcionário para realizar o bloqueio.');
+                showToast('Por favor, selecione pelo menos um funcionário para realizar o bloqueio.', 'warning');
                 return;
             }
             
@@ -496,6 +673,175 @@
             div.innerHTML = '<strong>Arquivos Gerados:</strong>' + parts.join('');
             resultDiv.appendChild(div);
         }
+
+        // --- Lógica do Modal de Desbloqueio ---
+        function updateSelectedUnblockCount() {
+            const checkedCount = document.querySelectorAll('.employee-unblock-checkbox:checked').length;
+            document.getElementById('selected-unblock-count').textContent = `${checkedCount} selecionados`;
+            document.getElementById('btn-confirm-unblock').disabled = (checkedCount === 0);
+        }
+
+        const closeUnblockModal = () => {
+            document.getElementById('unblockModal').style.display = 'none';
+        };
+
+        function calcularHorarioDesbloqueio(dataFormatada, horaFormatada) {
+            try {
+                const parts = dataFormatada.split('/');
+                const timeParts = horaFormatada.split(':');
+                const dt = new Date(parts[2], parts[1] - 1, parts[0], timeParts[0], timeParts[1]);
+                
+                dt.setHours(dt.getHours() + 11);
+                
+                let minutes = dt.getMinutes();
+                let rem = minutes % 5;
+                if (rem > 0) {
+                    dt.setMinutes(minutes + (5 - rem));
+                }
+                dt.setSeconds(0);
+                
+                const pad = (n) => n.toString().padStart(2, '0');
+                return `${pad(dt.getDate())}/${pad(dt.getMonth() + 1)}/${dt.getFullYear()} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+            } catch (e) {
+                return '-';
+            }
+        }
+
+        document.getElementById('btn-desbloquear').addEventListener('click', () => {
+            document.getElementById('unblock-result').style.display = 'none';
+            document.getElementById('unblock-result').innerHTML = '';
+            document.getElementById('unblock-loading').style.display = 'none';
+            document.getElementById('unblock-modal-actions').style.display = 'flex';
+            
+            const modalTbody = document.getElementById('unblock-table-body');
+            modalTbody.innerHTML = '';
+            
+            if (currentData.length === 0) {
+                showToast('Nenhum funcionário disponível para agendamento de desbloqueio.', 'warning');
+                return;
+            }
+            
+            currentData.forEach((item, index) => {
+                const calculatedTime = calcularHorarioDesbloqueio(item.DataFormatada, item.HoraFormatada);
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="text-align: center; vertical-align: middle;">
+                        <input type="checkbox" class="employee-unblock-checkbox" data-matricula="${item.Matricula}" data-index="${index}" checked>
+                    </td>
+                    <td><strong>${item.Matricula}</strong></td>
+                    <td style="text-transform: capitalize;">${item.Nome}</td>
+                    <td>${item.DataFormatada}</td>
+                    <td>${item.HoraFormatada}</td>
+                    <td><strong style="color: var(--primary-blue);">${calculatedTime}</strong></td>
+                `;
+                modalTbody.appendChild(tr);
+            });
+            
+            document.getElementById('select-all-unblock').checked = true;
+            updateSelectedUnblockCount();
+            
+            document.getElementById('unblockModal').style.display = 'block';
+        });
+
+        document.getElementById('select-all-unblock').addEventListener('change', (e) => {
+            const isChecked = e.target.checked;
+            const checkboxes = document.querySelectorAll('.employee-unblock-checkbox');
+            checkboxes.forEach(cb => {
+                cb.checked = isChecked;
+            });
+            updateSelectedUnblockCount();
+        });
+
+        document.getElementById('unblock-table-body').addEventListener('change', (e) => {
+            if (e.target.classList.contains('employee-unblock-checkbox')) {
+                updateSelectedUnblockCount();
+                const checkboxes = document.querySelectorAll('.employee-unblock-checkbox');
+                const checkedCount = document.querySelectorAll('.employee-unblock-checkbox:checked').length;
+                document.getElementById('select-all-unblock').checked = (checkboxes.length === checkedCount);
+            }
+        });
+
+        document.getElementById('close-unblock-modal').addEventListener('click', closeUnblockModal);
+        document.getElementById('btn-cancel-unblock').addEventListener('click', closeUnblockModal);
+
+        window.addEventListener('click', (event) => {
+            const blockModal = document.getElementById('blockModal');
+            const unblockModal = document.getElementById('unblockModal');
+            if (event.target === blockModal) {
+                closeBlockModal();
+            }
+            if (event.target === unblockModal) {
+                closeUnblockModal();
+            }
+        });
+
+        document.getElementById('btn-confirm-unblock').addEventListener('click', async () => {
+            const checkedCheckboxes = document.querySelectorAll('.employee-unblock-checkbox:checked');
+            const registros = Array.from(checkedCheckboxes).map(cb => {
+                const idx = cb.getAttribute('data-index');
+                const item = currentData[idx];
+                return {
+                    matricula: item.Matricula,
+                    data_saida: item.DataFormatada,
+                    hora_saida: item.HoraFormatada
+                };
+            });
+            
+            if (registros.length === 0) {
+                showToast('Por favor, selecione pelo menos um funcionário para o desbloqueio.', 'warning');
+                return;
+            }
+            
+            const btnConfirm = document.getElementById('btn-confirm-unblock');
+            const modalActions = document.getElementById('unblock-modal-actions');
+            const loadingDiv = document.getElementById('unblock-loading');
+            const resultDiv = document.getElementById('unblock-result');
+            
+            modalActions.style.display = 'none';
+            loadingDiv.style.display = 'block';
+            resultDiv.style.display = 'none';
+            resultDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/intersticio/desbloquear', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ registros })
+                });
+                
+                let result;
+                try {
+                    result = await response.json();
+                } catch (e) {
+                    throw new Error('Não foi possível processar a resposta do servidor.');
+                }
+                
+                if (!response.ok) {
+                    throw new Error(result.mensagem || 'Erro ao agendar desbloqueio no servidor.');
+                }
+                
+                loadingDiv.style.display = 'none';
+                resultDiv.style.display = 'block';
+                modalActions.style.display = 'flex';
+                
+                if (result.sucesso) {
+                    resultDiv.innerHTML = `
+                        <p class="success-text" style="color: #276749; background-color: #c6f6d5; padding: 0.75rem; border-radius: 6px; font-weight: 500; margin-bottom: 10px;">
+                            ✅ ${result.mensagem || 'Desbloqueios agendados com sucesso!'} <br>
+                            <a href="/comandos_agendados" target="_blank" style="color: #2b6cb0; font-weight: 600; text-decoration: underline;">👉 Ver Comandos Agendados</a>
+                        </p>
+                    `;
+                    showToast(result.mensagem || 'Desbloqueios agendados com sucesso na fila de comandos agendados!', 'success');
+                } else {
+                    resultDiv.innerHTML = `<p class="error-text">${result.mensagem || 'Falha no agendamento.'}</p>`;
+                }
+            } catch (error) {
+                loadingDiv.style.display = 'none';
+                resultDiv.style.display = 'block';
+                modalActions.style.display = 'flex';
+                resultDiv.innerHTML = `<p class="error-text">Erro de conexão: ${error.message}</p>`;
+            }
+        });
     </script>
 </body>
 </html>

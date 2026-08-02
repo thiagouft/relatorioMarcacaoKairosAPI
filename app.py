@@ -757,9 +757,140 @@ def api_intersticio_bloquear():
             'mensagem': 'Comandos de bloqueio encaminhados com sucesso para a fila de execução imediata.',
             'agendamento_id': novo_agendamento.id
         })
-        
     except Exception as e:
         print(f"Erro no processamento do bloqueio: {e}")
+        return jsonify({'sucesso': False, 'mensagem': f'Erro ao processar: {str(e)}'}), 500
+
+@app.route('/api/intersticio/desbloquear', methods=['POST'])
+@login_required
+@permission_required('intersticio')
+def api_intersticio_desbloquear():
+    try:
+        data = request.json
+        registros = data.get('registros', [])
+        
+        if not registros:
+            return jsonify({'sucesso': False, 'mensagem': 'Nenhum funcionário selecionado.'})
+            
+        db = get_db_session()
+        
+        agrupamentos = {}
+        erros = []
+        processados_count = 0
+        
+        hoje = get_local_now()
+        um_mes_atras = hoje - datetime.timedelta(days=30)
+        
+        start_date_str = um_mes_atras.strftime("%d-%m-%Y")
+        end_date_str = hoje.strftime("%d-%m-%Y")
+        
+        for reg in registros:
+            matricula = reg.get('matricula')
+            data_saida_str = reg.get('data_saida')
+            hora_saida_str = reg.get('hora_saida')
+            
+            if not matricula or not data_saida_str or not hora_saida_str:
+                continue
+                
+            try:
+                ponto_dt = datetime.datetime.strptime(f"{data_saida_str} {hora_saida_str}", "%d/%m/%Y %H:%M")
+                liberacao_dt = ponto_dt + datetime.timedelta(hours=11)
+                
+                minute = liberacao_dt.minute
+                rem = minute % 5
+                if rem > 0:
+                    liberacao_dt += datetime.timedelta(minutes=(5 - rem))
+                liberacao_dt = liberacao_dt.replace(second=0, microsecond=0)
+            except ValueError as val_err:
+                erros.append(f"Formato de data/hora inválido para matrícula {matricula}: {val_err}")
+                continue
+                
+            clock_ids = set()
+            try:
+                payload = {
+                    "CrachasPessoa": [int(matricula)],
+                    "DataInicio": start_date_str,
+                    "DataFim": end_date_str,
+                    "CalculoNaoAtualizado": "true",
+                    "ResponseType": "AS400V1"
+                }
+                response = requests.post(
+                    app.config['KAIROS_API_URL'],
+                    json=payload,
+                    headers=app.config['KAIROS_HEADERS'],
+                    timeout=TIMEOUT
+                )
+                
+                if response.status_code == 200:
+                    resp_json = response.json()
+                    sucesso = resp_json.get("Sucesso")
+                    obj_list = resp_json.get("Obj")
+                    if sucesso and isinstance(obj_list, list):
+                        for item in obj_list:
+                            relogio_id = item.get("RelogioID")
+                            if relogio_id is not None:
+                                clock_ids.add(int(relogio_id))
+            except Exception as api_err:
+                print(f"Erro ao buscar relógios do último mês para matrícula {matricula}: {api_err}")
+                
+            if not clock_ids:
+                relogios_sistema = fetch_clocks()
+                if relogios_sistema:
+                    for r in relogios_sistema:
+                        num = r.get('RelogioNumero')
+                        if num is not None:
+                            try:
+                                clock_ids.add(int(num))
+                            except ValueError:
+                                pass
+            
+            if not clock_ids:
+                erros.append(f"Matrícula {matricula} não possui relógios válidos no último mês e nenhum relógio ativo.")
+                continue
+                
+            key = (liberacao_dt.strftime('%Y-%m-%d %H:%M:%S'), tuple(sorted(clock_ids)))
+            if key not in agrupamentos:
+                agrupamentos[key] = []
+            agrupamentos[key].append(int(matricula))
+            processados_count += 1
+            
+        agendamentos_criados = []
+        config_options = {
+            'EnviarListaCredenciais': True,
+            'EnviarListaTemplate': True
+        }
+        
+        for (exec_dt_str, clock_ids_tuple), matriculas_lote in agrupamentos.items():
+            exec_dt = datetime.datetime.strptime(exec_dt_str, '%Y-%m-%d %H:%M:%S')
+            
+            novo_agendamento = AgendamentoComando(
+                usuario=session.get('username', 'Admin'),
+                data_hora_execucao=exec_dt,
+                comandos=json.dumps(config_options),
+                matriculas=json.dumps(matriculas_lote),
+                relogios=json.dumps(list(clock_ids_tuple)),
+                status='Pendente'
+            )
+            db.add(novo_agendamento)
+            db.commit()
+            agendamentos_criados.append(novo_agendamento.id)
+            log_action(f"Agendou desbloqueio do interstício #{novo_agendamento.id} para {len(matriculas_lote)} funcionários às {exec_dt_str}")
+            
+        db.close()
+        
+        msg = f"Agendamento de desbloqueio concluído para {processados_count} funcionários."
+        if erros:
+            msg += f" {len(erros)} avisos pendentes."
+            
+        return jsonify({
+            'sucesso': True,
+            'mensagem': msg,
+            'agendamento_ids': agendamentos_criados,
+            'erros': erros
+        })
+        
+    except Exception as e:
+        print(f"Erro no agendamento de desbloqueio: {e}")
         return jsonify({'sucesso': False, 'mensagem': f'Erro ao processar: {str(e)}'}), 500
 
 
@@ -2190,40 +2321,54 @@ def export_pdf():
 
         # Table Data
         if is_intersticio:
-            headers = ["Matrícula", "Nome", "Cargo / Função", "Seção", "Gerência", "Local Registro", "Data Saída", "Hora Saída"]
-            header_row = [Paragraph(h, header_cell_style) for h in headers]
-            table_data = [header_row]
-            for r in records:
-                row = [
-                    Paragraph(str(r.get('Matricula') or ''), cell_style),
-                    Paragraph(str(r.get('Nome') or ''), cell_style),
-                    Paragraph(str(r.get('NomeFuncao') or ''), cell_style),
-                    Paragraph(str(r.get('Secao') or ''), cell_style),
-                    Paragraph(str(r.get('Gerencia') or ''), cell_style),
-                    Paragraph(str(r.get('Local') or ''), cell_style),
-                    Paragraph(str(r.get('DataFormatada') or ''), cell_style),
-                    Paragraph(str(r.get('HoraFormatada') or ''), cell_style)
-                ]
-                table_data.append(row)
-            col_widths = [65, 110, 110, 120, 110, 85, 60, 60] # Total: 720
+            columns_definition = [
+                ('Matricula', 'Matrícula', 55.0),
+                ('Nome', 'Nome', 110.0),
+                ('NomeFuncao', 'Cargo / Função', 110.0),
+                ('Secao', 'Seção', 120.0),
+                ('Gerencia', 'Gerência', 110.0),
+                ('Local', 'Local Registro', 85.0),
+                ('DataFormatada', 'Data Saída', 65.0),
+                ('HoraFormatada', 'Hora Saída', 65.0)
+            ]
             download_filename = 'relatorio_intersticio.pdf'
         else:
-            headers = ["Matrícula", "Nome", "Local", "Relógio", "N. Série", "Data", "Hora"]
-            header_row = [Paragraph(h, header_cell_style) for h in headers]
-            table_data = [header_row]
-            for r in records:
-                row = [
-                    Paragraph(str(r.get('Matricula') or ''), cell_style),
-                    Paragraph(str(r.get('Nome') or ''), cell_style),
-                    Paragraph(str(r.get('Local') or ''), cell_style),
-                    Paragraph(str(r.get('RelogioID') or ''), cell_style),
-                    Paragraph(str(r.get('NumeroSerieRep') or ''), cell_style),
-                    Paragraph(str(r.get('DataFormatada') or ''), cell_style),
-                    Paragraph(str(r.get('HoraFormatada') or ''), cell_style)
-                ]
-                table_data.append(row)
-            col_widths = [70, 160, 130, 60, 140, 80, 80] # Total: 720
+            columns_definition = [
+                ('Matricula', 'Matrícula', 70.0),
+                ('Nome', 'Nome', 160.0),
+                ('Local', 'Local', 130.0),
+                ('RelogioID', 'Relógio', 60.0),
+                ('NumeroSerieRep', 'N. Série', 140.0),
+                ('DataFormatada', 'Data', 80.0),
+                ('HoraFormatada', 'Hora', 80.0)
+            ]
             download_filename = 'relatorio_ponto.pdf'
+
+        # Determinar quais colunas estão ativas nos registros enviados
+        active_cols = []
+        if records:
+            active_col_keys = set()
+            for r in records:
+                if isinstance(r, dict):
+                    active_col_keys.update(r.keys())
+            active_cols = [col for col in columns_definition if col[0] in active_col_keys]
+
+        if not active_cols:
+            active_cols = columns_definition
+
+        headers = [col[1] for col in active_cols]
+        header_row = [Paragraph(h, header_cell_style) for h in headers]
+        table_data = [header_row]
+
+        for r in records:
+            row = []
+            for col in active_cols:
+                row.append(Paragraph(str(r.get(col[0]) or ''), cell_style))
+            table_data.append(row)
+
+        total_width_defined = sum(col[2] for col in active_cols)
+        available_width = 720.0
+        col_widths = [(col[2] / total_width_defined) * available_width for col in active_cols]
 
         # Create Table
         t = Table(table_data, colWidths=col_widths)

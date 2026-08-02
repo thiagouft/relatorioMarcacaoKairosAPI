@@ -462,13 +462,13 @@
 
                     const dataHoraValBr = document.getElementById('dataHoraLocalModal').value.trim();
                     if (!dataHoraValBr) {
-                        alert('Por favor, digite a data e hora para o agendamento!');
+                        showToast('Por favor, digite a data e hora para o agendamento!', 'warning');
                         return;
                     }
 
                     const dataHoraVal = convertBrToIso(dataHoraValBr);
                     if (!dataHoraVal) {
-                        alert('Formato de data e hora inválido! Por favor, use o formato DD/MM/AAAA HH:MM (ex: 31/07/2026 09:40).');
+                        showToast('Formato de data e hora inválido! Por favor, use o formato DD/MM/AAAA HH:MM (ex: 31/07/2026 09:40).', 'warning');
                         return;
                     }
 
@@ -501,7 +501,7 @@
                                     <a href="/comandos_agendados" style="color: #2b6cb0; font-weight: 600; text-decoration: underline;">👉 Ver Comandos Agendados</a>
                                 </p>
                             `;
-                            alert(`Agendamento registrado com sucesso para o local ${grupo}!`);
+                            showToast(`Agendamento registrado com sucesso para o local ${grupo}!`, 'success');
                         } else {
                             resultDiv.innerHTML = `<p class="error">${res.mensagem}</p>`;
                         }

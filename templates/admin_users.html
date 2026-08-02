@@ -59,7 +59,7 @@
                                     style="padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px;"
                                     onclick="openPermissionsModal({{ user.id }}, '{{ user.full_name or user.username }}', {{ user_permissions[user.id] | tojson | forceescape }}, {{ 'true' if user.is_admin else 'false' }})">Permissões</button>
                                 <form method="POST" action="{{ url_for('delete_user', user_id=user.id) }}"
-                                    onsubmit="return confirm('Tem certeza que deseja excluir este login?');"
+                                    onsubmit="confirmExclusao(event, this)"
                                     style="display: inline;">
                                     <button type="submit" class="btn btn-danger"
                                         style="padding: 5px 10px; background-color: var(--error-red); color: white; border: none; border-radius: 4px; cursor: pointer;">Excluir</button>
@@ -265,6 +265,7 @@
             var permissionsModal = document.getElementById('permissionsModal');
             var editUserModal = document.getElementById('editUserModal');
             var createUserModal = document.getElementById('createUserModal');
+            var deleteConfirmModal = document.getElementById('deleteConfirmModal');
             if (event.target == permissionsModal) {
                 closePermissionsModal();
             }
@@ -274,8 +275,46 @@
             if (event.target == createUserModal) {
                 closeCreateUserModal();
             }
+            if (event.target == deleteConfirmModal) {
+                closeDeleteModal();
+            }
+        }
+
+        function confirmExclusao(event, formElement) {
+            event.preventDefault();
+            const formAction = formElement.getAttribute('action');
+            document.getElementById('deleteForm').setAttribute('action', formAction);
+            document.getElementById('deleteConfirmModal').style.display = 'block';
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('deleteConfirmModal').style.display = 'none';
         }
     </script>
+
+    <!-- Modal de Confirmação de Exclusão -->
+    <div id="deleteConfirmModal" class="modal" style="display: none;">
+        <div class="modal-content card" style="max-width: 400px; text-align: center; padding: 2rem;">
+            <span class="close" onclick="closeDeleteModal()"
+                style="color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; margin-top: -15px; margin-right: -10px;">&times;</span>
+            <div style="font-size: 3rem; color: var(--error-red); margin-bottom: 1rem;">⚠️</div>
+            <h3 style="margin-top:0; color: #2d3748;">Excluir Usuário</h3>
+            <p style="color: var(--text-gray); margin-bottom: 1.5rem; font-size: 0.95rem; line-height: 1.5;">
+                Tem certeza que deseja excluir este login? Esta ação não poderá ser desfeita.
+            </p>
+
+            <form id="deleteForm" method="POST" action="">
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button type="button" class="btn btn-secondary" onclick="closeDeleteModal()" style="flex: 1; padding: 10px;">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-danger" style="flex: 1; padding: 10px; background-color: var(--error-red); color: white;">
+                        Sim, Excluir
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 </body>
 
 </html>
