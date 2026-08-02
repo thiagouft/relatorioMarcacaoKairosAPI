@@ -1332,61 +1332,25 @@ def api_envio_comando_processar():
         if not funcionarios:
             return jsonify({'sucesso': False, 'mensagem': 'Nenhum funcionário fornecido.'})
             
-        for cracha in funcionarios:
-            result = fetch_cracha(cracha)
-            if not result.get('sucesso'):
-                pesquisa_falha.append(result)
-            else:
-                crachas_sucesso.append(result)
-                if result.get('semTemplates'):
-                    pesquisa_falha.append({
-                        'cracha': result.get('cracha'),
-                        'nome': result.get('nome'),
-                        'sucesso': False,
-                        'mensagem': result.get('mensagem', 'Não possui Biometria'),
-                        'dataDesligamento': result.get('dataDesligamento')
-                    })
-        
-        result_response = {
-            'sucesso': False,
-            'mensagem': 'Nenhum crachá válido encontrado para processamento.',
-            'falhas': pesquisa_falha
-        }
-        
-        if pesquisa_falha:
-            log_file_name = 'falha_consulta.txt'
-            normalized = []
-            for p in pesquisa_falha:
-                normalized.append({
-                    'cracha': p.get('cracha'),
-                    'nome': p.get('nome'),
-                    'sucesso': p.get('sucesso', False),
-                    'mensagem': p.get('mensagem', ''),
-                    'dataDesligamento': p.get('dataDesligamento')
-                })
-            with open(os.path.join(app.root_path, 'static', log_file_name), 'w', encoding='utf-8') as f:
-                json.dump(normalized, f, indent=2, ensure_ascii=False)
-            falha_file_name = log_file_name
+        db = get_db_session()
+        novo_agendamento = AgendamentoComando(
+            usuario=session.get('username', 'Admin'),
+            data_hora_execucao=get_local_now().replace(tzinfo=None),
+            comandos=comandos_str,
+            matriculas=json.dumps(funcionarios),
+            relogios=relogios_str,
+            status='Pendente'
+        )
+        db.add(novo_agendamento)
+        db.commit()
+        log_action(f"Criou agendamento imediato #{novo_agendamento.id} de comandos para {len(funcionarios)} funcionarios")
+        db.close()
 
-        if crachas_sucesso:
-            cracha_list = [c.get('cracha') for c in crachas_sucesso]
-            schedule_result = schedule_commands(cracha_list, config_options, relogio_list)
-            
-            if schedule_result.get('sucesso'):
-                cabecalho = generate_cabecalho_arquivo(relogio_list, config_options)
-                sucesso_file_name = 'sucesso_inclusao.pdf'
-                sucesso_content = [f"Crachá: {c.get('cracha')}, Nome: {c.get('nome')}" for c in crachas_sucesso]
-                generate_pdf_report(os.path.join(app.root_path, 'static', sucesso_file_name), cabecalho, sucesso_content)
-                
-                schedule_result['sucessoFileName'] = sucesso_file_name
-            
-            result_response = schedule_result
-            result_response['falhas'] = pesquisa_falha
-            if falha_file_name:
-                 result_response['falhaFileName'] = falha_file_name
-                 
-        log_action(f"Processado comandos para {len(funcionarios)} funcionarios")
-        return jsonify(result_response)
+        return jsonify({
+            'sucesso': True,
+            'mensagem': 'Comandos encaminhados com sucesso para a fila de execução imediata.',
+            'agendamento_id': novo_agendamento.id
+        })
 
     except Exception as e:
         print(f"Erro no processamento: {e}")
@@ -1445,10 +1409,12 @@ def process_scheduled_commands_worker():
 
                     if crachas_sucesso:
                         cracha_list = [c.get('cracha') for c in crachas_sucesso]
-                        schedule_result = schedule_commands(cracha_list, comandos_obj, relogio_list)
+                        # Mapeia IDs de banco de dados/URL (35, 36) para os números de relógio reais da API (33, 34)
+                        mapped_clock_ids = [33 if cid == 35 else 34 if cid == 36 else cid for cid in relogio_list]
+                        schedule_result = schedule_commands(cracha_list, comandos_obj, mapped_clock_ids)
                         if schedule_result.get('sucesso'):
                             job.status = 'Executado'
-                            job.resultado = f"Executado com sucesso para {len(crachas_sucesso)} colaboradores em {len(relogio_list)} relógios."
+                            job.resultado = f"Executado com sucesso para {len(crachas_sucesso)} colaboradores em {len(mapped_clock_ids)} relógios."
                             if pesquisa_falha:
                                 job.resultado += f" ({len(pesquisa_falha)} falhas/sem biometria)"
                         else:
@@ -1460,7 +1426,8 @@ def process_scheduled_commands_worker():
 
                     # Gerar arquivos de sucesso (PDF) e falha (TXT) automaticamente
                     try:
-                        sucesso_f, falha_f = generate_reports_for_job(job, pesquisa_falha, crachas_sucesso, comandos_obj, relogio_list, app.root_path)
+                        mapped_clock_ids = [33 if cid == 35 else 34 if cid == 36 else cid for cid in relogio_list]
+                        sucesso_f, falha_f = generate_reports_for_job(job, pesquisa_falha, crachas_sucesso, comandos_obj, mapped_clock_ids, app.root_path)
                         job.sucesso_file = sucesso_f
                         job.falha_file = falha_f
                     except Exception as r_err:
@@ -2016,67 +1983,25 @@ def api_envio_comando_por_local():
             'EnviarListaTemplate': True
         }
 
-        pesquisa_falha = []
-        crachas_sucesso = []
+        db = get_db_session()
+        novo_agendamento = AgendamentoComando(
+            usuario=session.get('username', 'Admin'),
+            data_hora_execucao=get_local_now().replace(tzinfo=None),
+            comandos=json.dumps(config_options),
+            matriculas=json.dumps(crachas),
+            relogios=json.dumps(clock_ids),
+            status='Pendente'
+        )
+        db.add(novo_agendamento)
+        db.commit()
+        log_action(f"Criou agendamento imediato #{novo_agendamento.id} de comandos por local {location}")
+        db.close()
 
-        for cracha in crachas:
-            result = fetch_cracha(cracha)
-            if not result.get('sucesso'):
-                pesquisa_falha.append(result)
-            else:
-                crachas_sucesso.append(result)
-                if result.get('semTemplates'):
-                    pesquisa_falha.append({
-                        'cracha': result.get('cracha'),
-                        'nome': result.get('nome'),
-                        'sucesso': False,
-                        'mensagem': result.get('mensagem', 'Não possui Biometria'),
-                        'dataDesligamento': result.get('dataDesligamento')
-                    })
-
-        result_response = {
-            'sucesso': False,
-            'mensagem': 'Nenhum crachá válido encontrado para processamento.',
-            'falhas': pesquisa_falha
-        }
-
-        falha_file_name = None
-        if pesquisa_falha:
-            log_file_name = 'falha_consulta_local.txt'
-            normalized = []
-            for p in pesquisa_falha:
-                normalized.append({
-                    'cracha': p.get('cracha'),
-                    'nome': p.get('nome'),
-                    'sucesso': p.get('sucesso', False),
-                    'mensagem': p.get('mensagem', ''),
-                    'dataDesligamento': p.get('dataDesligamento')
-                })
-            with open(os.path.join(app.root_path, 'static', log_file_name), 'w', encoding='utf-8') as f:
-                json.dump(normalized, f, indent=2, ensure_ascii=False)
-            falha_file_name = log_file_name
-
-        if crachas_sucesso:
-            # Mapeia IDs de banco de dados/URL (35, 36) para os números de relógio reais da API (33, 34)
-            mapped_clock_ids = [33 if cid == 35 else 34 if cid == 36 else cid for cid in clock_ids]
-            cracha_list = [c.get('cracha') for c in crachas_sucesso]
-            schedule_result = schedule_commands(cracha_list, config_options, mapped_clock_ids)
-
-            if schedule_result.get('sucesso'):
-                cabecalho = generate_cabecalho_arquivo(mapped_clock_ids, config_options)
-                sucesso_file_name = f'sucesso_inclusao_{location.replace(" ", "_")}.pdf'
-                sucesso_content = [f"Crachá: {c.get('cracha')}, Nome: {c.get('nome')}" for c in crachas_sucesso]
-                generate_pdf_report(os.path.join(app.root_path, 'static', sucesso_file_name), cabecalho, sucesso_content)
-
-                schedule_result['sucessoFileName'] = sucesso_file_name
-
-            result_response = schedule_result
-            result_response['falhas'] = pesquisa_falha
-            if falha_file_name:
-                result_response['falhaFileName'] = falha_file_name
-
-        log_action(f"Processado comandos para local {location} com {len(crachas)} crachás")
-        return jsonify(result_response)
+        return jsonify({
+            'sucesso': True,
+            'mensagem': f'Comandos agendados na fila de execução imediata para o local {location}.',
+            'agendamento_id': novo_agendamento.id
+        })
 
     except Exception as e:
         print(f"Erro no processamento por local: {e}")
@@ -2257,6 +2182,12 @@ def cadastros_pessoas():
     search = request.args.get('search', '').strip()
     ferias_inicio = request.args.get('ferias_inicio', '').strip()
     ferias_fim = request.args.get('ferias_fim', '').strip()
+    demissao_inicio = request.args.get('demissao_inicio', '').strip()
+    demissao_fim = request.args.get('demissao_fim', '').strip()
+    secao_codigo = request.args.get('secao', '').strip()
+    horario_codigo = request.args.get('horario', '').strip()
+    gerencia_id = request.args.get('gerencia', '', type=int)
+    situacao_id = request.args.get('situacao', '', type=int)
     page = request.args.get('page', 1, type=int)
     per_page = 20
     
@@ -2298,6 +2229,41 @@ def cadastros_pessoas():
                 Pessoa.data_fim_ferias >= dt_fim_start,
                 Pessoa.data_fim_ferias <= dt_fim_end
             )
+
+        dt_demissao_inicio = None
+        dt_demissao_fim = None
+
+        if demissao_inicio:
+            try:
+                dt_demissao_inicio = datetime.datetime.strptime(demissao_inicio, "%Y-%m-%d")
+            except ValueError:
+                pass
+
+        if demissao_fim:
+            try:
+                dt_demissao_fim = datetime.datetime.strptime(demissao_fim, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            except ValueError:
+                pass
+
+        # Filtros adicionais
+        if secao_codigo:
+            query = query.filter(Pessoa.secao_codigo == secao_codigo)
+        if horario_codigo:
+            query = query.filter(Pessoa.horario_codigo == horario_codigo)
+        if gerencia_id:
+            query = query.filter(Pessoa.secao_codigo.in_(
+                db.query(GerenciaSecao.secao_codigo).filter(GerenciaSecao.gerencia_id == gerencia_id)
+            ))
+        if situacao_id:
+            query = query.filter(Pessoa.situacao_id == situacao_id)
+            
+            # Se for Demitido, aplica o filtro de período
+            sit_obj = db.query(Situacao).filter_by(id=situacao_id).first()
+            if sit_obj and sit_obj.descricao == 'Demitido':
+                if dt_demissao_inicio:
+                    query = query.filter(Pessoa.data_demissao >= dt_demissao_inicio)
+                if dt_demissao_fim:
+                    query = query.filter(Pessoa.data_demissao <= dt_demissao_fim)
         
         total = query.count()
         total_pages = (total + per_page - 1) // per_page
@@ -2324,8 +2290,19 @@ def cadastros_pessoas():
                 'horario_desc': horarios_map.get(p.horario_codigo, ''),
                 'situacao_desc': situacoes_map.get(p.situacao_id, ''),
                 'data_inicio_ferias': p.data_inicio_ferias.strftime('%d/%m/%Y') if p.data_inicio_ferias else None,
-                'data_fim_ferias': p.data_fim_ferias.strftime('%d/%m/%Y') if p.data_fim_ferias else None
+                'data_fim_ferias': p.data_fim_ferias.strftime('%d/%m/%Y') if p.data_fim_ferias else None,
+                'pis_pasep': p.pis_pasep or '',
+                'cpf': p.cpf or '',
+                'data_nascimento': p.data_nascimento.strftime('%d/%m/%Y') if p.data_nascimento else '',
+                'data_admissao': p.data_admissao.strftime('%d/%m/%Y') if p.data_admissao else '',
+                'data_demissao': p.data_demissao.strftime('%d/%m/%Y') if p.data_demissao else ''
             })
+
+        # Listas para preencher os combos de filtros
+        secoes = db.query(Secao).order_by(Secao.descricao).all()
+        horarios = db.query(Horario).order_by(Horario.descricao).all()
+        gerencias = db.query(Gerencia).order_by(Gerencia.nome).all()
+        situacoes = db.query(Situacao).order_by(Situacao.descricao).all()
             
         permissions = get_menu_permissions()
         return render_template(
@@ -2336,9 +2313,260 @@ def cadastros_pessoas():
             search=search,
             ferias_inicio=ferias_inicio,
             ferias_fim=ferias_fim,
+            secao_codigo=secao_codigo,
+            horario_codigo=horario_codigo,
+            gerencia_id=gerencia_id,
+            situacao_id=situacao_id,
+            demissao_inicio=demissao_inicio,
+            demissao_fim=demissao_fim,
+            secoes=secoes,
+            horarios=horarios,
+            gerencias=gerencias,
+            situacoes=situacoes,
             permissions=permissions,
             is_admin=session.get('is_admin')
         )
+    finally:
+        db.close()
+
+@app.route('/api/cadastros/pessoas/exportar')
+@login_required
+@permission_required('cadastros')
+def api_cadastros_pessoas_exportar():
+    format_type = request.args.get('format', 'excel')
+    search = request.args.get('search', '').strip()
+    ferias_inicio = request.args.get('ferias_inicio', '').strip()
+    ferias_fim = request.args.get('ferias_fim', '').strip()
+    demissao_inicio = request.args.get('demissao_inicio', '').strip()
+    demissao_fim = request.args.get('demissao_fim', '').strip()
+    secao_codigo = request.args.get('secao', '').strip()
+    horario_codigo = request.args.get('horario', '').strip()
+    gerencia_id = request.args.get('gerencia', '', type=int)
+    situacao_id = request.args.get('situacao', '', type=int)
+
+    db = get_db_session()
+    try:
+        query = db.query(Pessoa)
+        if search:
+            query = query.filter((Pessoa.chapa.like(f"%{search}%")) | (Pessoa.nome.like(f"%{search}%")))
+
+        dt_ferias_inicio = None
+        dt_ferias_fim = None
+
+        if ferias_inicio:
+            try:
+                dt_ferias_inicio = datetime.datetime.strptime(ferias_inicio, "%Y-%m-%d")
+            except ValueError:
+                pass
+
+        if ferias_fim:
+            try:
+                dt_ferias_fim = datetime.datetime.strptime(ferias_fim, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            except ValueError:
+                pass
+
+        if dt_ferias_inicio:
+            dt_ini_start = dt_ferias_inicio.replace(hour=0, minute=0, second=0)
+            dt_ini_end = dt_ferias_inicio.replace(hour=23, minute=59, second=59)
+            query = query.filter(
+                Pessoa.data_inicio_ferias != None,
+                Pessoa.data_inicio_ferias >= dt_ini_start,
+                Pessoa.data_inicio_ferias <= dt_ini_end
+            )
+
+        if dt_ferias_fim:
+            dt_fim_start = dt_ferias_fim.replace(hour=0, minute=0, second=0)
+            dt_fim_end = dt_ferias_fim.replace(hour=23, minute=59, second=59)
+            query = query.filter(
+                Pessoa.data_fim_ferias != None,
+                Pessoa.data_fim_ferias >= dt_fim_start,
+                Pessoa.data_fim_ferias <= dt_fim_end
+            )
+
+        dt_demissao_inicio = None
+        dt_demissao_fim = None
+
+        if demissao_inicio:
+            try:
+                dt_demissao_inicio = datetime.datetime.strptime(demissao_inicio, "%Y-%m-%d")
+            except ValueError:
+                pass
+
+        if demissao_fim:
+            try:
+                dt_demissao_fim = datetime.datetime.strptime(demissao_fim, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            except ValueError:
+                pass
+
+        if secao_codigo:
+            query = query.filter(Pessoa.secao_codigo == secao_codigo)
+        if horario_codigo:
+            query = query.filter(Pessoa.horario_codigo == horario_codigo)
+        if gerencia_id:
+            query = query.filter(Pessoa.secao_codigo.in_(
+                db.query(GerenciaSecao.secao_codigo).filter(GerenciaSecao.gerencia_id == gerencia_id)
+            ))
+        if situacao_id:
+            query = query.filter(Pessoa.situacao_id == situacao_id)
+            
+            # Se for Demitido, aplica o filtro de período
+            sit_obj = db.query(Situacao).filter_by(id=situacao_id).first()
+            if sit_obj and sit_obj.descricao == 'Demitido':
+                if dt_demissao_inicio:
+                    query = query.filter(Pessoa.data_demissao >= dt_demissao_inicio)
+                if dt_demissao_fim:
+                    query = query.filter(Pessoa.data_demissao <= dt_demissao_fim)
+
+        pessoas_list = query.order_by(Pessoa.nome).all()
+
+        secoes_map = {s.codigo: s.descricao for s in db.query(Secao).all()}
+        horarios_map = {h.codigo: h.descricao for h in db.query(Horario).all()}
+        situacoes_map = {sit.id: sit.descricao for sit in db.query(Situacao).all()}
+
+        colunas_param = request.args.get('colunas', '').strip()
+        if colunas_param:
+            cols_list = [c.strip() for c in colunas_param.split(',') if c.strip()]
+        else:
+            cols_list = ['chapa', 'nome', 'funcao', 'secao', 'situacao']
+
+        colunas_map = {
+            'chapa': ('Chapa', lambda p: p.chapa),
+            'nome': ('Nome', lambda p: p.nome),
+            'funcao': ('Função', lambda p: p.nome_funcao or 'Não informada'),
+            'secao': ('Seção', lambda p: secoes_map.get(p.secao_codigo, 'Não associada')),
+            'horario': ('Horário', lambda p: horarios_map.get(p.horario_codigo, 'Não associado')),
+            'situacao': ('Situação', lambda p: situacoes_map.get(p.situacao_id, 'Não informada')),
+            'pis': ('PIS/PASEP', lambda p: p.pis_pasep or '-'),
+            'cpf': ('CPF', lambda p: p.cpf or '-'),
+            'nascimento': ('Data Nascimento', lambda p: p.data_nascimento.strftime('%d/%m/%Y') if p.data_nascimento else '-'),
+            'admissao': ('Data Admissão', lambda p: p.data_admissao.strftime('%d/%m/%Y') if p.data_admissao else '-'),
+            'demissao': ('Data Demissão', lambda p: p.data_demissao.strftime('%d/%m/%Y') if p.data_demissao else '-'),
+            'ferias_ini': ('Início Férias', lambda p: p.data_inicio_ferias.strftime('%d/%m/%Y') if p.data_inicio_ferias else '-'),
+            'ferias_fim': ('Fim Férias', lambda p: p.data_fim_ferias.strftime('%d/%m/%Y') if p.data_fim_ferias else '-')
+        }
+
+        # Filter active columns
+        cols_list = [c for c in cols_list if c in colunas_map]
+        if not cols_list:
+            cols_list = ['chapa', 'nome', 'funcao', 'secao', 'situacao']
+
+        records = []
+        for p in pessoas_list:
+            rec = {}
+            for col in cols_list:
+                header, func = colunas_map[col]
+                rec[header] = func(p)
+            records.append(rec)
+
+        if format_type == 'excel':
+            df = pd.DataFrame(records)
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, index=False, sheet_name='Pessoas')
+            output.seek(0)
+            log_action('Exportou relatório de pessoas para Excel')
+            return send_file(
+                output,
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                as_attachment=True,
+                download_name='relatorio_pessoas.xlsx'
+            )
+        else:
+            buffer = io.BytesIO()
+            doc = SimpleDocTemplate(
+                buffer,
+                pagesize=landscape(letter),
+                leftMargin=36,
+                rightMargin=36,
+                topMargin=36,
+                bottomMargin=36
+            )
+            elements = []
+            
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            styles = getSampleStyleSheet()
+            
+            title_style = ParagraphStyle(
+                'TitleStyle',
+                parent=styles['Heading1'],
+                fontName='Helvetica-Bold',
+                fontSize=14,
+                leading=16,
+                textColor=colors.HexColor('#3269D9'),
+                alignment=1,
+                spaceAfter=15
+            )
+            
+            cell_style = ParagraphStyle(
+                'TableCellStyle',
+                parent=styles['Normal'],
+                fontName='Helvetica',
+                fontSize=7,
+                leading=8.5,
+                alignment=1
+            )
+
+            header_cell_style = ParagraphStyle(
+                'TableHeaderCellStyle',
+                parent=styles['Normal'],
+                fontName='Helvetica-Bold',
+                fontSize=7.5,
+                leading=9,
+                textColor=colors.whitesmoke,
+                alignment=1
+            )
+            
+            elements.append(Paragraph("Relatório de Cadastro de Pessoas", title_style))
+            
+            headers = [colunas_map[col][0] for col in cols_list]
+            table_data = [[Paragraph(h, header_cell_style) for h in headers]]
+            
+            for r in records:
+                row_cells = []
+                for h in headers:
+                    row_cells.append(Paragraph(str(r.get(h, '-')), cell_style))
+                table_data.append(row_cells)
+                
+            colunas_pesos = {
+                'chapa': 60,
+                'nome': 130,
+                'funcao': 100,
+                'secao': 120,
+                'horario': 120,
+                'situacao': 70,
+                'pis': 70,
+                'cpf': 70,
+                'nascimento': 70,
+                'admissao': 70,
+                'demissao': 70,
+                'ferias_ini': 70,
+                'ferias_fim': 70
+            }
+            
+            total_peso = sum(colunas_pesos.get(col, 70) for col in cols_list)
+            col_widths = [(colunas_pesos.get(col, 70) / total_peso) * 720 for col in cols_list]
+            
+            t = Table(table_data, colWidths=col_widths, repeatRows=1)
+            t.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#141926')),
+                ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+                ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor('#F9FAFB')]),
+                ('TOPPADDING', (0,0), (-1,-1), 4),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 4),
+            ]))
+            elements.append(t)
+            
+            doc.build(elements)
+            buffer.seek(0)
+            log_action('Exportou relatório de pessoas para PDF')
+            return send_file(
+                buffer,
+                mimetype='application/pdf',
+                as_attachment=True,
+                download_name='relatorio_pessoas.pdf'
+            )
     finally:
         db.close()
 

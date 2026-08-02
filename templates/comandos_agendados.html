@@ -88,10 +88,18 @@
         }
 
         .btn-sm {
-            padding: 0.35rem 0.75rem;
+            padding: 0.25rem 0.5rem;
             font-size: 0.8rem;
-            border-radius: 6px;
+            border-radius: 4px;
             font-weight: 600;
+            min-height: unset;
+            height: auto;
+            line-height: 1.2;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.25rem;
         }
 
         .header-actions {
@@ -125,9 +133,6 @@
             <div class="header-actions">
                 <h2>Lista de Comandos Agendados</h2>
                 <div style="display: flex; gap: 0.75rem;">
-                    <a href="{{ url_for('agendamento_comandos') }}" class="btn btn-primary btn-sm" style="text-decoration: none; display: inline-flex; align-items: center; gap: 0.3rem;">
-                        ➕ Novo Agendamento
-                    </a>
                     <button id="btnAtualizarLista" class="btn btn-secondary btn-sm" style="background-color: #edf2f7; color: #2d3748; border: 1px solid #cbd5e0; cursor: pointer;">
                         🔄 Atualizar Lista
                     </button>
@@ -209,14 +214,14 @@
                     } else {
                         let btns = [];
                         if (item.sucesso_file) {
-                            btns.push(`<a href="/static/${item.sucesso_file}" target="_blank" class="btn btn-success btn-sm" style="text-decoration: none; display: inline-flex; align-items: center; gap: 0.2rem; background-color: #38a169; color: white; margin-right: 4px; padding: 0.3rem 0.6rem; border-radius: 4px;">📥 Sucesso</a>`);
+                            btns.push(`<a href="/static/${item.sucesso_file}" target="_blank" class="btn btn-success btn-sm" style="text-decoration: none; background-color: #38a169; color: white; margin-right: 4px;">📥 Sucesso</a>`);
                         }
                         if (item.falha_file) {
-                            btns.push(`<a href="/static/${item.falha_file}" target="_blank" class="btn btn-danger btn-sm" style="text-decoration: none; display: inline-flex; align-items: center; gap: 0.2rem; background-color: #e53e3e; color: white; margin-right: 4px; padding: 0.3rem 0.6rem; border-radius: 4px;">📥 Falhas</a>`);
+                            btns.push(`<a href="/static/${item.falha_file}" target="_blank" class="btn btn-danger btn-sm" style="text-decoration: none; background-color: #e53e3e; color: white; margin-right: 4px;">📥 Falhas</a>`);
                         }
                         
                         if (!item.sucesso_file && !item.falha_file) {
-                            btns.push(`<button onclick="gerarArquivosAgendamento(${item.id})" class="btn btn-secondary btn-sm" style="cursor: pointer; background-color: #4a5568; color: white; padding: 0.3rem 0.6rem; border-radius: 4px;" title="Gerar relatórios de Sucesso/Falha">📄 Gerar Arquivos</button>`);
+                            btns.push(`<button onclick="gerarArquivosAgendamento(${item.id})" class="btn btn-secondary btn-sm" style="cursor: pointer; background-color: #4a5568; color: white; margin-right: 4px;" title="Gerar relatórios de Sucesso/Falha">📄 Gerar Arquivos</button>`);
                         }
                         
                         acoesTd = btns.join('') || '<span style="color: #a0aec0;">-</span>';
@@ -231,7 +236,7 @@
                         <td>${item.qtd_relogios} relógios</td>
                         <td><span class="badge ${statusBadgeClass}">${item.status}</span></td>
                         <td><small style="color: #4a5568;">${item.resultado || '-'}</small></td>
-                        <td>${acoesTd}</td>
+                        <td style="white-space: nowrap; vertical-align: middle;">${acoesTd}</td>
                     `;
                     tbody.appendChild(tr);
                 });

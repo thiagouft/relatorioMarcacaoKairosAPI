@@ -39,7 +39,6 @@
                             <th>Código da Seção</th>
                             <th>Descrição da Seção</th>
                             <th>Gerente Responsável</th>
-                            <th>Ações</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -55,14 +54,11 @@
                                         <span style="color: var(--text-gray); font-style: italic;">Sem gerente definido</span>
                                     {% endif %}
                                 </td>
-                                <td>
-                                    <a href="{{ url_for('cadastros_secao_detalhe', code=s.codigo) }}" class="btn btn-primary" style="padding: 5px 10px; font-size: 0.85rem; width: auto; display: inline-block;">Visualizar Seção</a>
-                                </td>
                             </tr>
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td colspan="4" style="text-align: center; color: var(--text-gray); font-style: italic;">Nenhuma seção cadastrada.</td>
+                                <td colspan="3" style="text-align: center; color: var(--text-gray); font-style: italic;">Nenhuma seção cadastrada.</td>
                             </tr>
                         {% endif %}
                     </tbody>

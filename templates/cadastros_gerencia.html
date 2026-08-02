@@ -39,7 +39,6 @@
                             <th>ID</th>
                             <th>Nome do Gerente (Gerência)</th>
                             <th>Seções Sob Responsabilidade</th>
-                            <th>Ações</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -59,14 +58,11 @@
                                         <span style="color: var(--text-gray); font-style: italic;">Nenhuma seção vinculada</span>
                                     {% endif %}
                                 </td>
-                                <td>
-                                    <a href="{{ url_for('cadastros_gerencia_detalhe', id=g.id) }}" class="btn btn-primary" style="padding: 5px 10px; font-size: 0.85rem; width: auto; display: inline-block;">Ver Detalhes</a>
-                                </td>
                             </tr>
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td colspan="4" style="text-align: center; color: var(--text-gray); font-style: italic;">Nenhum gerente cadastrado.</td>
+                                <td colspan="3" style="text-align: center; color: var(--text-gray); font-style: italic;">Nenhum gerente cadastrado.</td>
                             </tr>
                         {% endif %}
                     </tbody>

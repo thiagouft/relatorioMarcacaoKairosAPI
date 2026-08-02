@@ -94,7 +94,12 @@
 
     <div class="container">
         <div class="card">
-            <h3>Buscar Locais de Ponto</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+                <h3 style="margin: 0;">Buscar Locais de Ponto</h3>
+                <a href="/comandos_agendados" class="btn btn-secondary" style="background-color: var(--primary-blue); color: var(--white); height: 42px; display: inline-flex; align-items: center; border: none; text-decoration: none; font-weight: 600; border-radius: 6px;">
+                    📅 Ver Comandos Agendados
+                </a>
+            </div>
             <p style="margin-bottom: 20px; color: #666; font-size: 0.9em;">
                 Informe as matrículas manualmente separadas por vírgula OU faça o upload de um arquivo de texto (.txt) contendo uma matrícula por linha. O sistema irá buscar em
                 quais relógios cada matrícula registrou ponto no período selecionado.
@@ -145,7 +150,7 @@
                 <p style="color: #4a5568; font-size: 0.9rem; margin-bottom: 1rem;">Escolha a data e hora para enviar credenciais e biometrias aos relógios deste local:</p>
                 <div style="margin: 1.5rem 0;">
                     <label for="dataHoraLocalModal" style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #2d3748;">Data e Hora da Execução:</label>
-                    <input type="datetime-local" id="dataHoraLocalModal" style="width: 100%; padding: 0.6rem; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 1rem;" />
+                    <input type="text" id="dataHoraLocalModal" placeholder="DD/MM/AAAA HH:MM" style="width: 100%; padding: 0.6rem; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 1rem;" />
                 </div>
                 <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
                     <button type="button" id="cancelarModalLocal" class="btn btn-secondary" style="background: #e2e8f0; color: #4a5568; border: none; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600;">Cancelar</button>
@@ -156,6 +161,25 @@
     </div>
 
     <script>
+        // Funções auxiliares para formatação e conversão de data/hora
+        function getFormatDataHoraAtual() {
+            const agora = new Date();
+            const dia = String(agora.getDate()).padStart(2, '0');
+            const mes = String(agora.getMonth() + 1).padStart(2, '0');
+            const ano = agora.getFullYear();
+            const hora = String(agora.getHours()).padStart(2, '0');
+            const minuto = String(agora.getMinutes()).padStart(2, '0');
+            return `${dia}/${mes}/${ano} ${hora}:${minuto}`;
+        }
+
+        function convertBrToIso(dataHoraBr) {
+            const regex = /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})$/;
+            const match = dataHoraBr.trim().match(regex);
+            if (!match) return null;
+            const [_, dia, mes, ano, hora, minuto] = match;
+            return `${ano}-${mes}-${dia}T${hora}:${minuto}`;
+        }
+
         document.getElementById('btn-processar').addEventListener('click', async () => {
             const startDateInput = document.getElementById('start_date').value;
             const endDateInput = document.getElementById('end_date').value;
@@ -415,6 +439,10 @@
         function abrirModalAgendamentoLocal(grupo, crachas, groupDiv) {
             currentAgendamentoLocal = { grupo, crachas, groupDiv };
             document.getElementById('tituloModalLocal').textContent = `📅 Agendar Comando: ${grupo}`;
+            const inputDataHora = document.getElementById('dataHoraLocalModal');
+            if (inputDataHora) {
+                inputDataHora.value = getFormatDataHoraAtual();
+            }
             document.getElementById('modalAgendamentoLocal').style.display = 'flex';
         }
 
@@ -432,9 +460,15 @@
                 btnConfirmar.addEventListener('click', async () => {
                     if (!currentAgendamentoLocal) return;
 
-                    const dataHoraVal = document.getElementById('dataHoraLocalModal').value;
+                    const dataHoraValBr = document.getElementById('dataHoraLocalModal').value.trim();
+                    if (!dataHoraValBr) {
+                        alert('Por favor, digite a data e hora para o agendamento!');
+                        return;
+                    }
+
+                    const dataHoraVal = convertBrToIso(dataHoraValBr);
                     if (!dataHoraVal) {
-                        alert('Por favor, selecione a data e hora para o agendamento!');
+                        alert('Formato de data e hora inválido! Por favor, use o formato DD/MM/AAAA HH:MM (ex: 31/07/2026 09:40).');
                         return;
                     }
 
@@ -506,13 +540,14 @@
 
                 if (result.sucesso) {
                     resultDiv.innerHTML = `
-                        <p class="success">${result.mensagem}</p>
-                        <p class="success">Comandos agendados com sucesso para o relógio.</p>
+                        <p class="success" style="color: #276749; background-color: #c6f6d5; padding: 0.75rem; border-radius: 6px;">
+                            ✅ ${result.mensagem} <br>
+                            <a href="/comandos_agendados" style="color: #2b6cb0; font-weight: 600; text-decoration: underline;">👉 Ver Comandos Agendados</a>
+                        </p>
                     `;
-                    renderDownloads(resultDiv, result);
+                    showToast(`Comando para o local ${grupo} enviado para a fila de execução imediata com sucesso!`, 'success');
                 } else {
                     resultDiv.innerHTML = `<p class="error">${result.mensagem}</p>`;
-                    renderDownloads(resultDiv, result);
                 }
             } catch (error) {
                 resultDiv.innerHTML = `<p class="error">Erro: ${error.message}</p>`;

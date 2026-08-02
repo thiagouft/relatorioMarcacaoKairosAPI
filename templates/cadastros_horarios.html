@@ -38,7 +38,6 @@
                         <tr>
                             <th>Código do Horário</th>
                             <th>Descrição do Horário</th>
-                            <th>Ações</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -47,14 +46,11 @@
                             <tr>
                                 <td><strong>{{ h.codigo }}</strong></td>
                                 <td>{{ h.descricao }}</td>
-                                <td>
-                                    <a href="{{ url_for('cadastros_horario_detalhe', code=h.codigo) }}" class="btn btn-primary" style="padding: 5px 10px; font-size: 0.85rem; width: auto; display: inline-block;">Visualizar Pessoas</a>
-                                </td>
                             </tr>
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td colspan="3" style="text-align: center; color: var(--text-gray); font-style: italic;">Nenhum horário cadastrado.</td>
+                                <td colspan="2" style="text-align: center; color: var(--text-gray); font-style: italic;">Nenhum horário cadastrado.</td>
                             </tr>
                         {% endif %}
                     </tbody>

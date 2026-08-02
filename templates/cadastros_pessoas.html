@@ -24,54 +24,184 @@
             <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
                 <h2 style="color: var(--primary-blue); margin: 0;">Cadastro de Pessoas</h2>
                 <div style="display: flex; gap: 10px;">
-                    <a href="{{ url_for('cadastros_importar') }}" class="btn btn-success" style="width: auto;">+ Importar Efetivo (.xls)</a>
-                    <a href="{{ url_for('cadastros_importar_ferias') }}" class="btn btn-primary" style="width: auto; background-color: #17a2b8; border-color: #17a2b8; color: #fff;">+ Importar Férias (.xlsx)</a>
+                    <a href="{{ url_for('cadastros_importar') }}" class="btn btn-success" style="width: auto;">Importar Efetivo (.xls)</a>
+                    <a href="{{ url_for('cadastros_importar_ferias') }}" class="btn btn-primary" style="width: auto; background-color: #17a2b8; border-color: #17a2b8; color: #fff;">Importar Férias (.xlsx)</a>
                 </div>
             </div>
 
             <!-- Search Form -->
-            <form method="GET" action="{{ url_for('cadastros_pessoas') }}" class="search-form" style="display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end; margin-bottom: 20px; background-color: var(--light-bg); padding: 15px; border-radius: 8px; border: 1px solid var(--border-gray);">
-                <div style="flex: 2; min-width: 200px;">
-                    <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-gray); margin-bottom: 5px; display: block;">Pesquisa Geral</label>
-                    <input type="text" name="search" class="form-control" placeholder="Chapa ou Nome..." value="{{ search }}">
-                </div>
-                
-                <div style="flex: 1; min-width: 160px;">
-                    <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-gray); margin-bottom: 5px; display: block;" title="Filtrar quem SAIU de férias nesta data">Início das Férias (Saída):</label>
-                    <input type="date" name="ferias_inicio" class="form-control" value="{{ ferias_inicio }}" title="Selecione o dia que o colaborador saiu de férias">
+            <form method="GET" action="{{ url_for('cadastros_pessoas') }}" class="search-form" style="display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; background-color: var(--light-bg); padding: 20px; border-radius: 8px; border: 1px solid var(--border-gray);">
+                <!-- Primeira Linha de Filtros (Pesquisa Geral e Divisões) -->
+                <div style="display: flex; flex-wrap: wrap; gap: 15px; width: 100%;">
+                    <div style="flex: 3; min-width: 250px;">
+                        <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-gray); margin-bottom: 5px; display: block;">Pesquisa Geral</label>
+                        <input type="text" name="search" class="form-control" placeholder="Chapa ou Nome..." value="{{ search }}">
+                    </div>
+                    
+                    <div style="flex: 2; min-width: 180px;">
+                        <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-gray); margin-bottom: 5px; display: block;">Seção</label>
+                        <select name="secao" class="form-control" style="height: 38px;">
+                            <option value="">Todas</option>
+                            {% for s in secoes %}
+                            <option value="{{ s.codigo }}" {% if s.codigo == secao_codigo %}selected{% endif %}>{{ s.descricao }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div style="flex: 2; min-width: 180px;">
+                        <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-gray); margin-bottom: 5px; display: block;">Gerência</label>
+                        <select name="gerencia" class="form-control" style="height: 38px;">
+                            <option value="">Todas</option>
+                            {% for g in gerencias %}
+                            <option value="{{ g.id }}" {% if g.id == gerencia_id %}selected{% endif %}>{{ g.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                 </div>
 
-                <div style="flex: 1; min-width: 160px;">
-                    <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-gray); margin-bottom: 5px; display: block;" title="Filtrar quem TERMINA as férias nesta data">Fim das Férias (Retorno):</label>
-                    <input type="date" name="ferias_fim" class="form-control" value="{{ ferias_fim }}" title="Selecione o dia que o colaborador termina as férias">
+                <!-- Segunda Linha de Filtros (Horário, Situação e Férias) -->
+                <div style="display: flex; flex-wrap: wrap; gap: 15px; width: 100%;">
+                    <div style="flex: 2; min-width: 180px;">
+                        <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-gray); margin-bottom: 5px; display: block;">Horário</label>
+                        <select name="horario" class="form-control" style="height: 38px;">
+                            <option value="">Todos</option>
+                            {% for h in horarios %}
+                            <option value="{{ h.codigo }}" {% if h.codigo == horario_codigo %}selected{% endif %}>{{ h.descricao }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div style="flex: 1.5; min-width: 150px;">
+                        <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-gray); margin-bottom: 5px; display: block;">Situação</label>
+                        <select name="situacao" class="form-control" style="height: 38px;">
+                            <option value="">Todas</option>
+                            {% for sit in situacoes %}
+                            <option value="{{ sit.id }}" {% if sit.id == situacao_id %}selected{% endif %}>{{ sit.descricao }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div id="container-periodo-demissao" style="display: none; gap: 15px; flex: 2; min-width: 300px;">
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-gray); margin-bottom: 5px; display: block;">Demissão (Início)</label>
+                            <input type="date" id="demissao_inicio" name="demissao_inicio" class="form-control" value="{{ demissao_inicio or '' }}">
+                        </div>
+                        <div style="flex: 1;">
+                            <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-gray); margin-bottom: 5px; display: block;">Demissão (Fim)</label>
+                            <input type="date" id="demissao_fim" name="demissao_fim" class="form-control" value="{{ demissao_fim or '' }}">
+                        </div>
+                    </div>
+
+                    <div style="flex: 1.2; min-width: 140px;">
+                        <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-gray); margin-bottom: 5px; display: block;" title="Filtrar quem SAIU de férias nesta data">Início das Férias</label>
+                        <input type="date" name="ferias_inicio" class="form-control" value="{{ ferias_inicio }}" title="Selecione o dia que o colaborador saiu de férias">
+                    </div>
+
+                    <div style="flex: 1.2; min-width: 140px;">
+                        <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-gray); margin-bottom: 5px; display: block;" title="Filtrar quem TERMINA as férias nesta data">Fim das Férias</label>
+                        <input type="date" name="ferias_fim" class="form-control" value="{{ ferias_fim }}" title="Selecione o dia que o colaborador termina as férias">
+                    </div>
                 </div>
 
-                <div style="display: flex; gap: 8px; align-items: center;">
-                    <button type="submit" class="btn btn-primary" style="width: auto; height: 38px; padding: 0 15px;">Filtrar</button>
-                    {% if search or ferias_inicio or ferias_fim %}
-                    <a href="{{ url_for('cadastros_pessoas') }}" class="btn" style="width: auto; height: 38px; padding: 0 15px; background-color: var(--border-gray); color: var(--dark-bg); text-decoration: none; display: inline-flex; align-items: center;">Limpar</a>
+                <!-- Rodapé do Formulário (Botões de Ação) -->
+                <div style="display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 10px; border-top: 1px solid var(--border-gray); padding-top: 15px; width: 100%;">
+                    <button type="submit" class="btn btn-primary" style="width: auto; height: 38px; padding: 0 20px;">Filtrar</button>
+                    {% if search or ferias_inicio or ferias_fim or secao_codigo or horario_codigo or gerencia_id or situacao_id or demissao_inicio or demissao_fim %}
+                    <a href="{{ url_for('cadastros_pessoas') }}" class="btn" style="width: auto; height: 38px; padding: 0 20px; background-color: var(--border-gray); color: var(--dark-bg); text-decoration: none; display: inline-flex; align-items: center;">Limpar</a>
                     {% endif %}
+                    <a href="{{ url_for('api_cadastros_pessoas_exportar', format='excel', search=search, ferias_inicio=ferias_inicio, ferias_fim=ferias_fim, secao=secao_codigo, horario=horario_codigo, gerencia=gerencia_id, situacao=situacao_id, demissao_inicio=demissao_inicio, demissao_fim=demissao_fim) }}" class="btn btn-success" style="height: 38px; padding: 0 20px; display: inline-flex; align-items: center; justify-content: center;">Exportar Excel</a>
+                    <a href="{{ url_for('api_cadastros_pessoas_exportar', format='pdf', search=search, ferias_inicio=ferias_inicio, ferias_fim=ferias_fim, secao=secao_codigo, horario=horario_codigo, gerencia=gerencia_id, situacao=situacao_id, demissao_inicio=demissao_inicio, demissao_fim=demissao_fim) }}" class="btn btn-secondary" style="height: 38px; padding: 0 20px; display: inline-flex; align-items: center; justify-content: center;">Exportar PDF</a>
                 </div>
             </form>
 
-            <div class="table-container">
+            <!-- Painel de Controle de Visualização de Colunas -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                <span style="font-size: 0.95rem; font-weight: 600; color: var(--primary-blue);">Lista de Colaboradores</span>
+                
+                <!-- Colunas Config Dropdown Container -->
+                <div class="dropdown-colunas" style="position: relative; display: inline-block;">
+                    <button type="button" id="btn-config-colunas" class="btn" style="height: 34px; padding: 0 12px; font-size: 0.85rem; min-height: unset; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border-gray); background-color: var(--white); color: var(--dark-bg); border-radius: 6px; cursor: pointer;" title="Configurar Colunas">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <line x1="9" y1="3" x2="9" y2="21"></line>
+                            <line x1="15" y1="3" x2="15" y2="21"></line>
+                        </svg>
+                        Colunas
+                    </button>
+                    
+                    <!-- Menu Flutuante -->
+                    <div id="dropdown-menu-colunas" style="display: none; position: absolute; right: 0; top: 38px; z-index: 1000; background-color: #FFFFFF; color: #1E293B; border: 1px solid var(--border-gray); border-radius: 8px; padding: 12px; width: 220px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05); flex-direction: column; gap: 8px;">
+                        <div style="font-size: 0.78rem; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; border-bottom: 1px solid var(--border-gray); padding-bottom: 4px;">Exibir Colunas</div>
+                        
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                            <input type="checkbox" class="col-toggle-checkbox" value="chapa" checked> Chapa
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                            <input type="checkbox" class="col-toggle-checkbox" value="nome" checked> Nome
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                            <input type="checkbox" class="col-toggle-checkbox" value="funcao" checked> Nome Função
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                            <input type="checkbox" class="col-toggle-checkbox" value="secao" checked> Seção
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                            <input type="checkbox" class="col-toggle-checkbox" value="horario"> Horário
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                            <input type="checkbox" class="col-toggle-checkbox" value="situacao" checked> Situação
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                            <input type="checkbox" class="col-toggle-checkbox" value="pis"> PIS/PASEP
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                            <input type="checkbox" class="col-toggle-checkbox" value="cpf"> CPF
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                            <input type="checkbox" class="col-toggle-checkbox" value="nascimento"> Data Nascimento
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                            <input type="checkbox" class="col-toggle-checkbox" value="admissao"> Data Admissão
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                            <input type="checkbox" class="col-toggle-checkbox" value="demissao"> Data Demissão
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                            <input type="checkbox" class="col-toggle-checkbox" value="ferias_ini"> Início Férias
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                            <input type="checkbox" class="col-toggle-checkbox" value="ferias_fim"> Fim Férias
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-container" style="overflow-x: auto; width: 100%;">
                 <table>
                     <thead>
                         <tr>
-                            <th>Chapa</th>
-                            <th>Nome</th>
-                            <th>Nome Função</th>
-                            <th>Seção</th>
-                            <th>Situação</th>
-                            <th>Ações</th>
+                            <th class="col-chapa">Chapa</th>
+                            <th class="col-nome">Nome</th>
+                            <th class="col-funcao">Nome Função</th>
+                            <th class="col-secao">Seção</th>
+                            <th class="col-horario">Horário</th>
+                            <th class="col-situacao">Situação</th>
+                            <th class="col-pis">PIS/PASEP</th>
+                            <th class="col-cpf">CPF</th>
+                            <th class="col-nascimento">Data Nascimento</th>
+                            <th class="col-admissao">Data Admissão</th>
+                            <th class="col-demissao">Data Demissão</th>
+                            <th class="col-ferias_ini">Início Férias</th>
+                            <th class="col-ferias_fim">Fim Férias</th>
+                            <th class="col-acoes">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% if pessoas %}
                             {% for p in pessoas %}
-                            <tr onclick="window.location='{{ url_for('cadastros_pessoa_detalhe', chapa=p.chapa) }}'" style="cursor: pointer;">
-                                <td><strong>{{ p.chapa }}</strong></td>
-                                <td>
+                            <tr>
+                                <td class="col-chapa"><strong>{{ p.chapa }}</strong></td>
+                                <td class="col-nome">
                                     {{ p.nome }}
                                     {% if (ferias_inicio or ferias_fim) and p.data_inicio_ferias and p.data_fim_ferias %}
                                     <div style="font-size: 0.78rem; color: #0369A1; background-color: #E0F2FE; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-top: 3px;">
@@ -79,9 +209,10 @@
                                     </div>
                                     {% endif %}
                                 </td>
-                                <td>{{ p.nome_funcao or 'Não informada' }}</td>
-                                <td><span title="{{ p.secao_codigo }}">{{ p.secao_desc or 'Não associada' }}</span></td>
-                                <td>
+                                <td class="col-funcao">{{ p.nome_funcao or 'Não informada' }}</td>
+                                <td class="col-secao"><span title="{{ p.secao_codigo }}">{{ p.secao_desc or 'Não associada' }}</span></td>
+                                <td class="col-horario"><span title="{{ p.horario_codigo }}">{{ p.horario_desc or 'Não associado' }}</span></td>
+                                <td class="col-situacao">
                                     {% if p.situacao_desc == 'Ativo' %}
                                     <span style="color: var(--success-green); font-weight: bold;">Ativo</span>
                                     {% elif p.situacao_desc == 'Demitido' %}
@@ -90,14 +221,27 @@
                                     <span style="color: var(--warning-yellow);">{{ p.situacao_desc or 'Não informada' }}</span>
                                     {% endif %}
                                 </td>
-                                <td>
-                                    <a href="{{ url_for('cadastros_pessoa_detalhe', chapa=p.chapa) }}" class="btn btn-primary" style="padding: 5px 10px; font-size: 0.85rem; width: auto; display: inline-block;">Visualizar</a>
+                                <td class="col-pis">{{ p.pis_pasep or '-' }}</td>
+                                <td class="col-cpf">{{ p.cpf or '-' }}</td>
+                                <td class="col-nascimento">{{ p.data_nascimento or '-' }}</td>
+                                <td class="col-admissao">{{ p.data_admissao or '-' }}</td>
+                                <td class="col-demissao">
+                                    {% if p.data_demissao %}
+                                    <span style="color: var(--error-red);">{{ p.data_demissao }}</span>
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td class="col-ferias_ini">{{ p.data_inicio_ferias or '-' }}</td>
+                                <td class="col-ferias_fim">{{ p.data_fim_ferias or '-' }}</td>
+                                <td class="col-acoes">
+                                    <a href="{{ url_for('cadastros_pessoa_detalhe', chapa=p.chapa) }}" class="btn btn-primary" style="padding: 5px 10px; font-size: 0.85rem; width: auto; display: inline-flex; align-items: center; justify-content: center;">Visualizar</a>
                                 </td>
                             </tr>
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td colspan="6" style="text-align: center; color: var(--text-gray); font-style: italic;">Nenhum funcionário encontrado.</td>
+                                <td colspan="14" style="text-align: center; color: var(--text-gray); font-style: italic;">Nenhum funcionário encontrado.</td>
                             </tr>
                         {% endif %}
                     </tbody>
@@ -107,15 +251,160 @@
             <!-- Pagination -->
             {% if total_pages > 1 %}
             <div class="pagination">
-                <a href="{{ url_for('cadastros_pessoas', page=1, search=search, ferias_inicio=ferias_inicio, ferias_fim=ferias_fim) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == 1 %}pointer-events: none; opacity: 0.5;{% endif %}">&laquo; Primeira</a>
-                <a href="{{ url_for('cadastros_pessoas', page=page-1, search=search, ferias_inicio=ferias_inicio, ferias_fim=ferias_fim) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == 1 %}pointer-events: none; opacity: 0.5;{% endif %}">&lsaquo; Anterior</a>
+                <a href="{{ url_for('cadastros_pessoas', page=1, search=search, ferias_inicio=ferias_inicio, ferias_fim=ferias_fim, secao=secao_codigo, horario=horario_codigo, gerencia=gerencia_id, situacao=situacao_id, demissao_inicio=demissao_inicio, demissao_fim=demissao_fim) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == 1 %}pointer-events: none; opacity: 0.5;{% endif %}">&laquo; Primeira</a>
+                <a href="{{ url_for('cadastros_pessoas', page=page-1, search=search, ferias_inicio=ferias_inicio, ferias_fim=ferias_fim, secao=secao_codigo, horario=horario_codigo, gerencia=gerencia_id, situacao=situacao_id, demissao_inicio=demissao_inicio, demissao_fim=demissao_fim) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == 1 %}pointer-events: none; opacity: 0.5;{% endif %}">&lsaquo; Anterior</a>
                 
                 <span style="align-self: center; font-size: 0.9rem; color: var(--text-gray);">Página <strong>{{ page }}</strong> de <strong>{{ total_pages }}</strong></span>
                 
-                <a href="{{ url_for('cadastros_pessoas', page=page+1, search=search, ferias_inicio=ferias_inicio, ferias_fim=ferias_fim) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == total_pages %}pointer-events: none; opacity: 0.5;{% endif %}">Próxima &rsaquo;</a>
-                <a href="{{ url_for('cadastros_pessoas', page=total_pages, search=search, ferias_inicio=ferias_inicio, ferias_fim=ferias_fim) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == total_pages %}pointer-events: none; opacity: 0.5;{% endif %}">Última &raquo;</a>
+                <a href="{{ url_for('cadastros_pessoas', page=page+1, search=search, ferias_inicio=ferias_inicio, ferias_fim=ferias_fim, secao=secao_codigo, horario=horario_codigo, gerencia=gerencia_id, situacao=situacao_id, demissao_inicio=demissao_inicio, demissao_fim=demissao_fim) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == total_pages %}pointer-events: none; opacity: 0.5;{% endif %}">Próxima &rsaquo;</a>
+                <a href="{{ url_for('cadastros_pessoas', page=total_pages, search=search, ferias_inicio=ferias_inicio, ferias_fim=ferias_fim, secao=secao_codigo, horario=horario_codigo, gerencia=gerencia_id, situacao=situacao_id, demissao_inicio=demissao_inicio, demissao_fim=demissao_fim) }}" class="btn" style="padding: 6px 12px; background-color: var(--light-bg); color: var(--dark-bg); width: auto; text-decoration: none; border-radius: 4px; font-size: 0.85rem; {% if page == total_pages %}pointer-events: none; opacity: 0.5;{% endif %}">Última &raquo;</a>
             </div>
             {% endif %}
+        </div>
+    </div>
+
+    <!-- Script de Visibilidade Dinâmica de Colunas e Filtro de Demissão -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const btnConfig = document.getElementById('btn-config-colunas');
+        const dropdownMenu = document.getElementById('dropdown-menu-colunas');
+        const checkboxes = document.querySelectorAll('.col-toggle-checkbox');
+        
+        const selectSituacao = document.querySelector('select[name="situacao"]');
+        const containerDemissao = document.getElementById('container-periodo-demissao');
+        const inputDemissaoInicio = document.getElementById('demissao_inicio');
+        const inputDemissaoFim = document.getElementById('demissao_fim');
+        
+        // Toggle dropdown
+        btnConfig.addEventListener('click', function(e) {
+            e.stopPropagation();
+            dropdownMenu.style.display = dropdownMenu.style.display === 'none' ? 'flex' : 'none';
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!btnConfig.contains(e.target) && !dropdownMenu.contains(e.target)) {
+                dropdownMenu.style.display = 'none';
+            }
+        });
+
+        // Toggle visibilidade do período de demissão
+        function toggleDemissaoPeriodo() {
+            if (selectSituacao.selectedIndex === -1) return;
+            const selectedText = selectSituacao.options[selectSituacao.selectedIndex].text;
+            if (selectedText === 'Demitido') {
+                containerDemissao.style.display = 'flex';
+            } else {
+                containerDemissao.style.display = 'none';
+                inputDemissaoInicio.value = '';
+                inputDemissaoFim.value = '';
+            }
+        }
+
+        selectSituacao.addEventListener('change', function() {
+            toggleDemissaoPeriodo();
+            updateColumnsVisibility();
+        });
+        
+        // Listeners para alteração de datas atualizarem os links
+        inputDemissaoInicio.addEventListener('change', updateColumnsVisibility);
+        inputDemissaoFim.addEventListener('change', updateColumnsVisibility);
+
+        // Colunas padrão
+        const defaultCols = ['chapa', 'nome', 'funcao', 'secao', 'situacao'];
+        
+        // Ler do localStorage
+        let activeCols = JSON.parse(localStorage.getItem('pessoas_active_columns'));
+        if (!activeCols || !Array.isArray(activeCols)) {
+            activeCols = defaultCols;
+        }
+        
+        // Sempre forçar 'acoes' na listagem
+        if (!activeCols.includes('acoes')) {
+            activeCols.push('acoes');
+        }
+
+        // Set checkboxes
+        checkboxes.forEach(cb => {
+            cb.checked = activeCols.includes(cb.value);
+        });
+
+        // Função para atualizar a visibilidade das colunas e links
+        function updateColumnsVisibility() {
+            const currentActive = [];
+            checkboxes.forEach(cb => {
+                const colId = cb.value;
+                const isVisible = cb.checked;
+                if (isVisible) {
+                    currentActive.push(colId);
+                }
+                
+                const cells = document.querySelectorAll(`.col-${colId}`);
+                cells.forEach(cell => {
+                    cell.style.display = isVisible ? '' : 'none';
+                });
+            });
+            
+            const acoesCells = document.querySelectorAll('.col-acoes');
+            acoesCells.forEach(cell => cell.style.display = '');
+
+            // Salvar no localStorage
+            localStorage.setItem('pessoas_active_columns', JSON.stringify(currentActive));
+            
+            // Atualizar links de exportação
+            const exportExcelBtn = document.querySelector('a[href*="/exportar?format=excel"]');
+            const exportPdfBtn = document.querySelector('a[href*="/exportar?format=pdf"]');
+            
+            const colString = currentActive.join(',');
+            const demissaoInicioVal = inputDemissaoInicio.value;
+            const demissaoFimVal = inputDemissaoFim.value;
+            
+            if (exportExcelBtn) {
+                let href = exportExcelBtn.getAttribute('href');
+                href = updateQueryStringParameter(href, 'colunas', colString);
+                href = updateQueryStringParameter(href, 'demissao_inicio', demissaoInicioVal);
+                href = updateQueryStringParameter(href, 'demissao_fim', demissaoFimVal);
+                exportExcelBtn.setAttribute('href', href);
+            }
+            
+            if (exportPdfBtn) {
+                let href = exportPdfBtn.getAttribute('href');
+                href = updateQueryStringParameter(href, 'colunas', colString);
+                href = updateQueryStringParameter(href, 'demissao_inicio', demissaoInicioVal);
+                href = updateQueryStringParameter(href, 'demissao_fim', demissaoFimVal);
+                exportPdfBtn.setAttribute('href', href);
+            }
+
+            // Atualizar links de paginação
+            const pageLinks = document.querySelectorAll('.pagination a');
+            pageLinks.forEach(link => {
+                let href = link.getAttribute('href');
+                href = updateQueryStringParameter(href, 'colunas', colString);
+                href = updateQueryStringParameter(href, 'demissao_inicio', demissaoInicioVal);
+                href = updateQueryStringParameter(href, 'demissao_fim', demissaoFimVal);
+                link.setAttribute('href', href);
+            });
+        }
+
+        function updateQueryStringParameter(uri, key, value) {
+            var re = new RegExp("([?&])" + key + "=.*?(&|$)", "i");
+            var separator = uri.indexOf('?') !== -1 ? "&" : "?";
+            if (uri.match(re)) {
+                return uri.replace(re, '$1' + key + "=" + value + '$2');
+            } else {
+                return uri + separator + key + "=" + value;
+            }
+        }
+
+        checkboxes.forEach(cb => {
+            cb.addEventListener('change', updateColumnsVisibility);
+        });
+
+        // Executar inicialmente
+        toggleDemissaoPeriodo();
+        updateColumnsVisibility();
+    });
+    </script>
         </div>
     </div>
 

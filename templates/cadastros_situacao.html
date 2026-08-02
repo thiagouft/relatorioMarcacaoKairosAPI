@@ -38,7 +38,6 @@
                         <tr>
                             <th>ID da Situação</th>
                             <th>Descrição da Situação</th>
-                            <th>Ações</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -55,14 +54,11 @@
                                         <span style="color: var(--dark-bg);">{{ s.descricao }}</span>
                                     {% endif %}
                                 </td>
-                                <td>
-                                    <a href="{{ url_for('cadastros_situacao_detalhe', id=s.id) }}" class="btn btn-primary" style="padding: 5px 10px; font-size: 0.85rem; width: auto; display: inline-block;">Visualizar Pessoas</a>
-                                </td>
                             </tr>
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td colspan="3" style="text-align: center; color: var(--text-gray); font-style: italic;">Nenhuma situação cadastrada.</td>
+                                <td colspan="2" style="text-align: center; color: var(--text-gray); font-style: italic;">Nenhuma situação cadastrada.</td>
                             </tr>
                         {% endif %}
                     </tbody>

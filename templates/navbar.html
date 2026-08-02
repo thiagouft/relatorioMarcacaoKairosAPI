@@ -34,7 +34,7 @@
                 <!-- 2. Comandos do Relógio -->
                 {% if is_admin or permissions.envio_comando or permissions.admin_locais_ponto %}
                 <div class="dropdown">
-                    <button class="dropbtn" {% if active_page in ['envio_comando', 'admin_locais_ponto', 'agendamento_comandos', 'comandos_agendados'] %}style="font-weight: bold; border-bottom: 2px solid var(--accent-color);"{% endif %}>Comandos do Relógio</button>
+                    <button class="dropbtn" {% if active_page in ['envio_comando', 'admin_locais_ponto', 'comandos_agendados'] %}style="font-weight: bold; border-bottom: 2px solid var(--accent-color);"{% endif %}>Comandos do Relógio</button>
                     <div class="dropdown-content">
                         {% if is_admin or permissions.envio_comando %}
                         <a href="{{ url_for('envio_comando') }}#envio">Envio de comando</a>
@@ -46,7 +46,6 @@
                         <a href="{{ url_for('envio_comando') }}#ponteiro">Reposição de Ponteiro</a>
                         <a href="{{ url_for('envio_comando') }}#datahora">Envio de Data e Hora</a>
                         <a href="{{ url_for('envio_comando') }}#desligamento">Envio de Desligamento</a>
-                        <a href="{{ url_for('agendamento_comandos') }}">Agendamento de Comandos</a>
                         <a href="{{ url_for('comandos_agendados') }}">Comandos Agendados</a>
                         {% endif %}
                     </div>
@@ -97,6 +96,99 @@
 </nav>
 
 <script>
+// --- Custom Toast Notification System ---
+(function() {
+    function initToastContainer() {
+        let container = document.getElementById('custom-toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'custom-toast-container';
+            document.body.appendChild(container);
+        }
+        return container;
+    }
+
+    window.showToast = function(message, type = 'info', duration = 4000) {
+        const container = initToastContainer();
+        const toast = document.createElement('div');
+        toast.className = `custom-toast custom-toast-${type}`;
+
+        let icon = 'ℹ️';
+        if (type === 'success') icon = '✅';
+        if (type === 'error') icon = '❌';
+        if (type === 'warning') icon = '⚠️';
+
+        toast.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 1.15rem; display: flex; align-items: center;">${icon}</span>
+                <span>${message}</span>
+            </div>
+            <button class="custom-toast-close" aria-label="Fechar">&times;</button>
+        `;
+
+        container.appendChild(toast);
+
+        toast.offsetHeight; // trigger reflow
+        toast.classList.add('show');
+
+        const removeToast = () => {
+            if (toast.classList.contains('show')) {
+                toast.classList.remove('show');
+                toast.addEventListener('transitionend', () => {
+                    toast.remove();
+                });
+            }
+        };
+
+        const closeBtn = toast.querySelector('.custom-toast-close');
+        closeBtn.addEventListener('click', removeToast);
+
+        if (duration > 0) {
+            setTimeout(removeToast, duration);
+        }
+    };
+
+    window.alert = function(message) {
+        if (!message) return;
+        
+        let type = 'info';
+        const msgLower = message.toLowerCase();
+        
+        if (
+            msgLower.includes('sucesso') || 
+            msgLower.includes('concluído') || 
+            msgLower.includes('salvo') || 
+            msgLower.includes('registrado') || 
+            msgLower.includes('adicionado') || 
+            msgLower.includes('removido') || 
+            msgLower.includes('deletado') || 
+            msgLower.includes('excluído')
+        ) {
+            type = 'success';
+        } else if (
+            msgLower.includes('erro') || 
+            msgLower.includes('falha') || 
+            msgLower.includes('inválido') || 
+            msgLower.includes('não encontrado') || 
+            msgLower.includes('exceção')
+        ) {
+            type = 'error';
+        } else if (
+            msgLower.includes('por favor') || 
+            msgLower.includes('selecione') || 
+            msgLower.includes('atenção') || 
+            msgLower.includes('aviso') || 
+            msgLower.includes('obrigatório') || 
+            msgLower.includes('digite') ||
+            msgLower.includes('nenhum')
+        ) {
+            type = 'warning';
+        }
+        
+        window.showToast(message, type);
+    };
+})();
+
 document.addEventListener('DOMContentLoaded', function() {
     const menuToggle = document.getElementById('menuToggle');
     const navbarBottom = document.querySelector('.navbar-bottom');

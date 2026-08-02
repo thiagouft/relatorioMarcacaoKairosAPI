@@ -1,4 +1,23 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // Funções auxiliares para formatação e conversão de data/hora
+    function getFormatDataHoraAtual() {
+        const agora = new Date();
+        const dia = String(agora.getDate()).padStart(2, '0');
+        const mes = String(agora.getMonth() + 1).padStart(2, '0');
+        const ano = agora.getFullYear();
+        const hora = String(agora.getHours()).padStart(2, '0');
+        const minuto = String(agora.getMinutes()).padStart(2, '0');
+        return `${dia}/${mes}/${ano} ${hora}:${minuto}`;
+    }
+
+    function convertBrToIso(dataHoraBr) {
+        const regex = /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})$/;
+        const match = dataHoraBr.trim().match(regex);
+        if (!match) return null;
+        const [_, dia, mes, ano, hora, minuto] = match;
+        return `${ano}-${mes}-${dia}T${hora}:${minuto}`;
+    }
+
     // Use the global window variable we set in the template
     const gruposRelogios = window.gruposRelogios || {};
 
@@ -141,14 +160,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (result.sucesso) {
                 resultDiv.innerHTML = `
-                  <p class="success">${result.mensagem}</p>
-                  <p class="success">Comandos agendados com sucesso para o relógio.</p>
-              `;
-                renderDownloads(resultDiv, result);
-                alert("O processamento foi concluído! Verifique a seção de resultados.");
+                  <p class="success" style="color: #276749; background-color: #c6f6d5; padding: 0.75rem; border-radius: 6px; font-weight: 500;">
+                      ✅ ${result.mensagem} <br>
+                      <a href="/comandos_agendados" style="color: #2b6cb0; font-weight: 600; text-decoration: underline;">👉 Ver Comandos Agendados</a>
+                  </p>
+               `;
+                showToast("Comando enviado para a fila de execução imediata com sucesso!", "success");
             } else {
-                resultDiv.innerHTML = `<p class="error">${result.mensagem}</p>`;
-                renderDownloads(resultDiv, result);
+                resultDiv.innerHTML = `<p class="error" style="color: #9b2c2c; background-color: #fed7d7; padding: 0.75rem; border-radius: 6px;">❌ ${result.mensagem}</p>`;
             }
         } catch (error) {
             progressBar.style.display = "none";
@@ -243,6 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalAgendamento = document.getElementById("modalAgendamento");
     const btnCancelarModal = document.getElementById("cancelarModalAgendamento");
     const btnConfirmarModal = document.getElementById("confirmarModalAgendamento");
+    const inputDataHoraModal = document.getElementById("dataHoraModal");
 
     if (btnAgendarModal && modalAgendamento) {
         btnAgendarModal.addEventListener("click", () => {
@@ -267,6 +287,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             modalAgendamento.style.display = "flex";
+            if (inputDataHoraModal) {
+                inputDataHoraModal.value = getFormatDataHoraAtual();
+            }
         });
 
         if (btnCancelarModal) {
@@ -277,9 +300,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (btnConfirmarModal) {
             btnConfirmarModal.addEventListener("click", async () => {
-                const dataHoraVal = document.getElementById("dataHoraModal").value;
+                const dataHoraValBr = document.getElementById("dataHoraModal").value.trim();
+                if (!dataHoraValBr) {
+                    alert("Por favor, digite a data e hora para o agendamento!");
+                    return;
+                }
+
+                const dataHoraVal = convertBrToIso(dataHoraValBr);
                 if (!dataHoraVal) {
-                    alert("Por favor, selecione a data e hora para o agendamento!");
+                    alert("Formato de data e hora inválido! Por favor, use o formato DD/MM/AAAA HH:MM (ex: 31/07/2026 09:40).");
                     return;
                 }
 
