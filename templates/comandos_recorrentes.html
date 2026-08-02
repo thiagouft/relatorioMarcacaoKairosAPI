@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comandos Recorrentes - Kairos CPRT</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    {% set active_page = 'comandos_recorrentes' %}
+    {% include 'navbar.html' %}
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap: 10px;">
+                <h3 style="margin: 0;">Comandos Recorrentes</h3>
+                <button type="button" class="btn btn-primary" onclick="openCreateModal()" style="font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+                    ➕ Novo Comando Recorrente
+                </button>
+            </div>
+
+            <p style="color: var(--text-gray); margin-bottom: 20px; font-size: 0.95rem;">
+                Defina automações que serão enviadas para <strong>todos os relógios ativos</strong> do sistema diariamente na hora configurada.
+            </p>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Tipo de Comando</th>
+                            <th>Início da Recorrência</th>
+                            <th>Horário Diário</th>
+                            <th>Criado Por</th>
+                            <th>Último Disparo</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if comandos %}
+                        {% for cmd in comandos %}
+                        <tr>
+                            <td>{{ cmd.id }}</td>
+                            <td>
+                                {% if cmd.tipo == 'datahora' %}
+                                <strong style="color: var(--primary-blue);">⚡ Envio de Data e Hora</strong>
+                                {% elif cmd.tipo == 'ponteiro' %}
+                                <strong style="color: var(--success-green);">🔗 Reposição de Ponteiro</strong>
+                                {% else %}
+                                {{ cmd.tipo }}
+                                {% endif %}
+                            </td>
+                            <td>{{ cmd.data_inicio.strftime('%d/%m/%Y') }}</td>
+                            <td>{{ cmd.hora_execucao }}</td>
+                            <td>{{ cmd.usuario }}</td>
+                            <td>
+                                {% if cmd.ultimo_disparo %}
+                                <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                                    <span>{{ cmd.ultimo_disparo.strftime('%d/%m/%Y %H:%M') }}</span>
+                                    {% if cmd.log_file %}
+                                    <a href="/static/{{ cmd.log_file }}" target="_blank" title="Baixar Log da Última Execução"
+                                       style="display: inline-flex; align-items: center; justify-content: center; background-color: var(--light-bg); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; font-size: 0.85rem; color: var(--primary-blue); font-weight: 600; text-decoration: none; transition: background-color 0.2s;">
+                                        📥 Log
+                                    </a>
+                                    {% endif %}
+                                </div>
+                                {% else %}
+                                <span style="color: var(--text-gray); font-style: italic;">Nunca disparado</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <form method="POST" action="{{ url_for('excluir_comando_recorrente', id=cmd.id) }}"
+                                    onsubmit="confirmExclusao(event, this)"
+                                    style="display: inline;">
+                                    <button type="submit" class="btn btn-danger"
+                                        style="padding: 5px 10px; background-color: var(--error-red); color: white; border: none; border-radius: 4px; cursor: pointer;">Excluir</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% else %}
+                        <tr>
+                            <td colspan="7" style="text-align: center; color: var(--text-gray); font-style: italic; padding: 20px;">
+                                Nenhum comando recorrente cadastrado.
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Modal de Cadastro de Comando Recorrente -->
+    <div id="createRecurrentModal" class="modal" style="display: none;">
+        <div class="modal-content card" style="max-width: 450px;">
+            <span class="close" onclick="closeCreateModal()"
+                style="color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
+            <h3 style="margin-top:0; color: var(--primary-blue);">Cadastrar Comando Recorrente</h3>
+            <p style="color: var(--text-gray); margin-bottom: 20px;">Configure a recorrência diária para envio aos relógios.</p>
+
+            <form method="POST" action="{{ url_for('criar_comando_recorrente') }}">
+                <div class="form-group">
+                    <label for="tipo">Comando a ser executado</label>
+                    <select name="tipo" id="tipo" class="form-control" required style="width: 100%; height: 38px; border-radius: 4px; border: 1px solid var(--border-color); padding: 5px 10px;">
+                        <option value="datahora">⚡ Envio de Data e Hora (Todos os Relógios)</option>
+                        <option value="ponteiro">🔗 Reposição de Ponteiro (Todos os Relógios - Data D-1)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="data_inicio">Data de Início</label>
+                    <input type="date" name="data_inicio" id="data_inicio" class="form-control" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="hora_execucao">Hora da Execução Diária</label>
+                    <input type="time" name="hora_execucao" id="hora_execucao" class="form-control" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="margin-top: 15px; width: 100%;">Cadastrar Recorrência</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal de Confirmação de Exclusão -->
+    <div id="deleteConfirmModal" class="modal" style="display: none;">
+        <div class="modal-content card" style="max-width: 400px; text-align: center; padding: 2rem;">
+            <span class="close" onclick="closeDeleteModal()"
+                style="color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; margin-top: -15px; margin-right: -10px;">&times;</span>
+            <div style="font-size: 3rem; color: var(--error-red); margin-bottom: 1rem;">⚠️</div>
+            <h3 style="margin-top:0; color: #2d3748;">Excluir Recorrência</h3>
+            <p style="color: var(--text-gray); margin-bottom: 1.5rem; font-size: 0.95rem; line-height: 1.5;">
+                Tem certeza que deseja excluir este comando recorrente? Ele não será mais executado.
+            </p>
+
+            <form id="deleteForm" method="POST" action="">
+                <div style="display: flex; gap: 10px; justify-content: center;">
+                    <button type="button" class="btn btn-secondary" onclick="closeDeleteModal()" style="flex: 1; padding: 10px;">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-danger" style="flex: 1; padding: 10px; background-color: var(--error-red); color: white;">
+                        Sim, Excluir
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openCreateModal() {
+            document.getElementById('createRecurrentModal').style.display = 'block';
+            
+            // Set default date to today
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('data_inicio').value = today;
+        }
+
+        function closeCreateModal() {
+            document.getElementById('createRecurrentModal').style.display = 'none';
+        }
+
+        function confirmExclusao(event, formElement) {
+            event.preventDefault();
+            const formAction = formElement.getAttribute('action');
+            document.getElementById('deleteForm').setAttribute('action', formAction);
+            document.getElementById('deleteConfirmModal').style.display = 'block';
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('deleteConfirmModal').style.display = 'none';
+        }
+
+        // Close when clicking outside of the modal content
+        window.onclick = function (event) {
+            var modal = document.getElementById('createRecurrentModal');
+            var deleteModal = document.getElementById('deleteConfirmModal');
+            if (event.target == modal) {
+                closeCreateModal();
+            }
+            if (event.target == deleteModal) {
+                closeDeleteModal();
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -11,7 +11,7 @@ import threading
 import time
 from functools import wraps
 from config import Config, get_local_now
-from db_setup import User, Log, Base, Horario, Secao, Gerencia, GerenciaSecao, Situacao, Pessoa, AgendamentoComando
+from db_setup import User, Log, Base, Horario, Secao, Gerencia, GerenciaSecao, Situacao, Pessoa, AgendamentoComando, ComandoRecorrente
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -368,6 +368,70 @@ def comandos_agendados():
     permissions = get_menu_permissions()
     return render_template('comandos_agendados.html', is_admin=session.get('is_admin'), permissions=permissions)
 
+@app.route('/admin/comandos_recorrentes')
+@app.route('/comandos_recorrentes')
+@login_required
+@permission_required('envio_comando')
+def comandos_recorrentes():
+    log_action('Acessou menu de Comandos Recorrentes')
+    db = get_db_session()
+    comandos = db.query(ComandoRecorrente).order_by(ComandoRecorrente.id.desc()).all()
+    db.close()
+    permissions = get_menu_permissions()
+    return render_template('comandos_recorrentes.html', comandos=comandos, is_admin=session.get('is_admin'), permissions=permissions)
+
+@app.route('/admin/comandos_recorrentes/criar', methods=['POST'])
+@login_required
+@permission_required('envio_comando')
+def criar_comando_recorrente():
+    try:
+        tipo = request.form.get('tipo')  # 'datahora' ou 'ponteiro'
+        data_inicio_str = request.form.get('data_inicio')  # 'YYYY-MM-DD'
+        hora_execucao = request.form.get('hora_execucao')  # 'HH:MM'
+        
+        if not tipo or not data_inicio_str or not hora_execucao:
+            flash('Preencha todos os campos obrigatórios.', 'danger')
+            return redirect(url_for('comandos_recorrentes'))
+            
+        data_inicio = datetime.datetime.strptime(data_inicio_str, '%Y-%m-%d')
+        
+        db = get_db_session()
+        novo = ComandoRecorrente(
+            usuario=session.get('username', 'Admin'),
+            tipo=tipo,
+            data_inicio=data_inicio,
+            hora_execucao=hora_execucao
+        )
+        db.add(novo)
+        db.commit()
+        log_action(f"Cadastrou comando recorrente de {tipo} iniciando em {data_inicio_str} às {hora_execucao}")
+        db.close()
+        flash('Comando recorrente cadastrado com sucesso!', 'success')
+    except Exception as e:
+        flash(f'Erro ao cadastrar comando recorrente: {str(e)}', 'danger')
+        
+    return redirect(url_for('comandos_recorrentes'))
+
+@app.route('/admin/comandos_recorrentes/excluir/<int:id>', methods=['POST'])
+@login_required
+@permission_required('envio_comando')
+def excluir_comando_recorrente(id):
+    try:
+        db = get_db_session()
+        comando = db.query(ComandoRecorrente).get(id)
+        if comando:
+            db.delete(comando)
+            db.commit()
+            log_action(f"Excluiu comando recorrente #{id} ({comando.tipo})")
+            flash('Comando recorrente excluído com sucesso.', 'success')
+        else:
+            flash('Comando recorrente não encontrado.', 'danger')
+        db.close()
+    except Exception as e:
+        flash(f'Erro ao excluir comando recorrente: {str(e)}', 'danger')
+        
+    return redirect(url_for('comandos_recorrentes'))
+
 @app.route('/hora_extra_acumulada')
 @permission_required('hora_extra_acumulada')
 def hora_extra_acumulada():
@@ -674,67 +738,25 @@ def api_intersticio_bloquear():
             "ExcluirListaPessoas": True
         }
         
-        pesquisa_falha = []
-        crachas_sucesso = []
-        falha_file_name = None
-        
-        # 3. Pesquisar cada crachá na API do Kairos
-        for cracha in funcionarios:
-            result = fetch_cracha(cracha)
-            if not result.get('sucesso'):
-                pesquisa_falha.append(result)
-            else:
-                crachas_sucesso.append(result)
-                if result.get('semTemplates'):
-                    pesquisa_falha.append({
-                        'cracha': result.get('cracha'),
-                        'nome': result.get('nome'),
-                        'sucesso': False,
-                        'mensagem': result.get('mensagem', 'Não possui Biometria'),
-                        'dataDesligamento': result.get('dataDesligamento')
-                    })
-        
-        result_response = {
-            'sucesso': False,
-            'mensagem': 'Nenhum crachá válido encontrado para processamento.',
-            'falhas': pesquisa_falha
-        }
-        
-        if pesquisa_falha:
-            log_file_name = 'falha_consulta_bloqueio.txt'
-            normalized = []
-            for p in pesquisa_falha:
-                normalized.append({
-                    'cracha': p.get('cracha'),
-                    'nome': p.get('nome'),
-                    'sucesso': p.get('sucesso', False),
-                    'mensagem': p.get('mensagem', ''),
-                    'dataDesligamento': p.get('dataDesligamento')
-                })
-            with open(os.path.join(app.root_path, 'static', log_file_name), 'w', encoding='utf-8') as f:
-                json.dump(normalized, f, indent=2, ensure_ascii=False)
-            falha_file_name = log_file_name
-            
-        if crachas_sucesso:
-            cracha_list = [c.get('cracha') for c in crachas_sucesso]
-            # Agendar os comandos no Kairos
-            schedule_result = schedule_commands(cracha_list, config_options, relogio_list)
-            
-            if schedule_result.get('sucesso'):
-                cabecalho = generate_cabecalho_arquivo(relogio_list, config_options)
-                sucesso_file_name = 'sucesso_bloqueio.pdf'
-                sucesso_content = [f"Crachá: {c.get('cracha')}, Nome: {c.get('nome')}" for c in crachas_sucesso]
-                generate_pdf_report(os.path.join(app.root_path, 'static', sucesso_file_name), cabecalho, sucesso_content)
-                
-                schedule_result['sucessoFileName'] = sucesso_file_name
-                
-            result_response = schedule_result
-            result_response['falhas'] = pesquisa_falha
-            if falha_file_name:
-                result_response['falhaFileName'] = falha_file_name
-                
-        log_action(f"Processou comandos de bloqueio para {len(funcionarios)} funcionarios a partir do intersticio")
-        return jsonify(result_response)
+        db = get_db_session()
+        novo_agendamento = AgendamentoComando(
+            usuario=session.get('username', 'Admin'),
+            data_hora_execucao=get_local_now().replace(tzinfo=None),
+            comandos=json.dumps(config_options),
+            matriculas=json.dumps(funcionarios),
+            relogios=json.dumps(relogio_list),
+            status='Pendente'
+        )
+        db.add(novo_agendamento)
+        db.commit()
+        log_action(f"Criou agendamento imediato #{novo_agendamento.id} de bloqueio para {len(funcionarios)} funcionarios a partir do intersticio")
+        db.close()
+
+        return jsonify({
+            'sucesso': True,
+            'mensagem': 'Comandos de bloqueio encaminhados com sucesso para a fila de execução imediata.',
+            'agendamento_id': novo_agendamento.id
+        })
         
     except Exception as e:
         print(f"Erro no processamento do bloqueio: {e}")
@@ -1439,6 +1461,74 @@ def process_scheduled_commands_worker():
 
                 db.commit()
                 time.sleep(2)  # Pausa de segurança entre execuções de agendamentos para não sobrecarregar a API do Kairos
+
+            # --- PROCESSAMENTO DOS COMANDOS RECORRENTES ---
+            try:
+                recurrent_jobs = db.query(ComandoRecorrente).all()
+                for command in recurrent_jobs:
+                    if now.date() >= command.data_inicio.date():
+                        now_time_str = now.strftime('%H:%M')
+                        if now_time_str >= command.hora_execucao:
+                            ja_disparado = False
+                            if command.ultimo_disparo:
+                                ja_disparado = command.ultimo_disparo.date() == now.date()
+                            
+                            if not ja_disparado:
+                                command.ultimo_disparo = now_naive
+                                db.commit()
+                                
+                                try:
+                                    log_filename = f"log_recorrente_{command.id}.txt"
+                                    log_filepath = os.path.join(app.root_path, 'static', log_filename)
+                                    
+                                    with open(log_filepath, 'w', encoding='utf-8') as f_log:
+                                        f_log.write(f"--- LOG DE EXECUÇÃO RECORRENTE #{command.id} ---\n")
+                                        f_log.write(f"Tipo: {command.tipo}\n")
+                                        f_log.write(f"Data/Hora de Início: {now.strftime('%d/%m/%Y %H:%M:%S')}\n\n")
+                                        
+                                        if command.tipo == 'datahora':
+                                            for line in run_relogio_automation('datahora', relogio_ids=None):
+                                                f_log.write(line)
+                                                f_log.flush()
+                                        elif command.tipo == 'ponteiro':
+                                            yesterday = now - datetime.timedelta(days=1)
+                                            yesterday_str = yesterday.strftime('%d/%m/%Y')
+                                            for line in run_relogio_automation('ponteiro', data_personalizada=yesterday_str, relogio_ids=None):
+                                                f_log.write(line)
+                                                f_log.flush()
+                                        
+                                        f_log.write(f"\n--- FIM DA EXECUÇÃO EM {get_local_now().strftime('%d/%m/%Y %H:%M:%S')} ---\n")
+                                    
+                                    command.log_file = log_filename
+                                    db.commit()
+
+                                    novo_log = Log(
+                                        user_id=None,
+                                        username='Sistema (Recorrente)',
+                                        action=f"Executou comando recorrente #{command.id} ({command.tipo}) com sucesso para todos os relógios"
+                                    )
+                                    db.add(novo_log)
+                                    db.commit()
+                                except Exception as aut_err:
+                                    print(f"[AGENDAMENTO WORKER] Erro na execução de recorrente #{command.id}: {aut_err}")
+                                    try:
+                                        with open(log_filepath, 'a', encoding='utf-8') as f_log:
+                                            f_log.write(f"\n❌ ERRO NA EXECUÇÃO: {str(aut_err)}\n")
+                                    except:
+                                        pass
+                                    
+                                    command.log_file = log_filename
+                                    db.commit()
+
+                                    novo_log = Log(
+                                        user_id=None,
+                                        username='Sistema (Recorrente)',
+                                        action=f"Falha ao rodar comando recorrente #{command.id} ({command.tipo}): {str(aut_err)}"
+                                    )
+                                    db.add(novo_log)
+                                    db.commit()
+            except Exception as rec_err:
+                print(f"[AGENDAMENTO WORKER] Erro no processamento de recorrentes: {rec_err}")
 
             db.close()
         except Exception as e:

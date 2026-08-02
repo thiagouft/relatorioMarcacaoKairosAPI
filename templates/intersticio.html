@@ -461,14 +461,14 @@
                 
                 if (result.sucesso) {
                     resultDiv.innerHTML = `
-                        <p class="success-text">${result.mensagem || 'Operação realizada com sucesso!'}</p>
-                        <p>Comandos agendados com sucesso para os relógios.</p>
+                        <p class="success-text" style="color: #276749; background-color: #c6f6d5; padding: 0.75rem; border-radius: 6px; font-weight: 500; margin-bottom: 10px;">
+                            ✅ ${result.mensagem || 'Comandos de bloqueio enviados para a fila de execução imediata!'} <br>
+                            <a href="/comandos_agendados" target="_blank" style="color: #2b6cb0; font-weight: 600; text-decoration: underline;">👉 Ver Comandos Agendados</a>
+                        </p>
                     `;
-                    renderBlockDownloads(resultDiv, result);
-                    alert('Processamento concluído com sucesso!');
+                    showToast(result.mensagem || 'Comandos de bloqueio enviados para a fila de execução imediata com sucesso!', 'success');
                 } else {
                     resultDiv.innerHTML = `<p class="error-text">${result.mensagem || 'Falha no processamento.'}</p>`;
-                    renderBlockDownloads(resultDiv, result);
                 }
             } catch (error) {
                 loadingDiv.style.display = 'none';
