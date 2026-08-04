@@ -314,6 +314,7 @@ def reset_password():
         return redirect(url_for('home'))
     
     user.password_hash = generate_password_hash(new_password)
+    user.must_change_password = True
     db.commit()
     db.close()
     
@@ -1609,7 +1610,7 @@ def process_scheduled_commands_worker():
                                 db.commit()
                                 
                                 try:
-                                    log_filename = f"log_recorrente_{command.id}.txt"
+                                    log_filename = f"documents/log_recorrente_{command.id}.txt"
                                     log_filepath = os.path.join(app.root_path, 'static', log_filename)
                                     
                                     with open(log_filepath, 'w', encoding='utf-8') as f_log:
@@ -1627,6 +1628,231 @@ def process_scheduled_commands_worker():
                                             for line in run_relogio_automation('ponteiro', data_personalizada=yesterday_str, relogio_ids=None):
                                                 f_log.write(line)
                                                 f_log.flush()
+                                        elif command.tipo == 'desbloqueio_ferias':
+                                            f_log.write("Iniciando rotina de Desbloqueio de Férias...\n")
+                                            f_log.flush()
+                                            
+                                            # 1. Obter ontem (D-1)
+                                            ontem = now.date() - datetime.timedelta(days=1)
+                                            dt_fim_start = datetime.datetime(ontem.year, ontem.month, ontem.day, 0, 0, 0)
+                                            dt_fim_end = datetime.datetime(ontem.year, ontem.month, ontem.day, 23, 59, 59)
+                                            
+                                            f_log.write(f"Filtrando pessoas com Fim das Férias em: {ontem.strftime('%d/%m/%Y')}\n")
+                                            f_log.flush()
+                                            
+                                            # 2. Consultar pessoas
+                                            pessoas = db.query(Pessoa).filter(
+                                                Pessoa.data_fim_ferias != None,
+                                                Pessoa.data_fim_ferias >= dt_fim_start,
+                                                Pessoa.data_fim_ferias <= dt_fim_end
+                                            ).all()
+                                            
+                                            if not pessoas:
+                                                f_log.write("Nenhuma pessoa encontrada com fim das férias na data filtrada.\n")
+                                                f_log.flush()
+                                            else:
+                                                matriculas = [p.chapa for p in pessoas if p.chapa]
+                                                f_log.write(f"Encontrados {len(pessoas)} colaboradores:\n")
+                                                for p in pessoas:
+                                                    f_log.write(f" - Chapa: {p.chapa} | Nome: {p.nome}\n")
+                                                f_log.write("\n")
+                                                f_log.flush()
+                                                
+                                                # 3. Calcular período de apuração de 2 meses
+                                                def subtrair_meses_local(dt, meses):
+                                                    import calendar
+                                                    m = dt.month - meses
+                                                    y = dt.year
+                                                    while m <= 0:
+                                                        m += 12
+                                                        y -= 1
+                                                    _, last_d = calendar.monthrange(y, m)
+                                                    d = min(dt.day, last_d)
+                                                    return datetime.date(y, m, d)
+                                                
+                                                start_date_obj = subtrair_meses_local(now.date(), 2)
+                                                end_date_obj = now.date()
+                                                
+                                                start_date_str = start_date_obj.strftime('%d-%m-%Y')
+                                                end_date_str = end_date_obj.strftime('%d-%m-%Y')
+                                                
+                                                f_log.write(f"Período de apuração dos locais de ponto: {start_date_obj.strftime('%d/%m/%Y')} a {end_date_obj.strftime('%d/%m/%Y')}\n")
+                                                f_log.write("Consultando API do Kairos...\n\n")
+                                                f_log.flush()
+                                                
+                                                grupo_crachas = {grupo: set() for grupo in CLOCK_GROUPS}
+                                                crachas_sem_dados = []
+                                                crachas_inexistentes = []
+                                                
+                                                # 4. Consultar locais de ponto para cada colaborador
+                                                for p in pessoas:
+                                                    cracha = p.chapa
+                                                    f_log.write(f"Consultando chapa {cracha} ({p.nome})... ")
+                                                    f_log.flush()
+                                                    
+                                                    payload = {
+                                                        "CrachasPessoa": [cracha],
+                                                        "DataInicio": start_date_str,
+                                                        "DataFim": end_date_str,
+                                                        "CalculoNaoAtualizado": "true",
+                                                        "ResponseType": "AS400V1"
+                                                    }
+                                                    
+                                                    try:
+                                                        response = requests.post(
+                                                            app.config['KAIROS_API_URL'],
+                                                            json=payload,
+                                                            headers=app.config['KAIROS_HEADERS'],
+                                                            timeout=TIMEOUT
+                                                        )
+                                                        
+                                                        if response.status_code == 200:
+                                                            resp_json = response.json()
+                                                            sucesso = resp_json.get("Sucesso")
+                                                            obj_list = resp_json.get("Obj")
+                                                            
+                                                            if sucesso and isinstance(obj_list, list) and len(obj_list) > 0:
+                                                                relogio_ids = set()
+                                                                for item in obj_list:
+                                                                    relogio_id = item.get("RelogioID")
+                                                                    if relogio_id is not None:
+                                                                        relogio_ids.add(relogio_id)
+                                                                        
+                                                                grupos_encontrados = []
+                                                                for grupo, ids_grupo in CLOCK_GROUPS.items():
+                                                                    if any(relogio_id in ids_grupo for relogio_id in relogio_ids):
+                                                                        grupo_crachas[grupo].add(cracha)
+                                                                        grupos_encontrados.append(grupo)
+                                                                
+                                                                f_log.write(f"OK. Relógios: {list(relogio_ids)}. Locais: {grupos_encontrados}\n")
+                                                                
+                                                            elif sucesso and isinstance(obj_list, list) and len(obj_list) == 0:
+                                                                crachas_sem_dados.append(cracha)
+                                                                f_log.write("Sem marcação de ponto no período.\n")
+                                                            elif not sucesso and obj_list is None:
+                                                                crachas_inexistentes.append(cracha)
+                                                                f_log.write("Chapa não encontrada na base do Kairos.\n")
+                                                            else:
+                                                                f_log.write("Erro na resposta da API.\n")
+                                                        else:
+                                                            f_log.write(f"Erro HTTP {response.status_code}.\n")
+                                                    except Exception as e_api:
+                                                        f_log.write(f"Falha na requisição: {str(e_api)}.\n")
+                                                    f_log.flush()
+                                                
+                                                # 5. Criar agendamentos para cada grupo
+                                                f_log.write("\nAgendando comandos de desbloqueio na fila imediata...\n")
+                                                f_log.flush()
+                                                
+                                                config_options = {
+                                                    'EnviarListaCredenciais': True,
+                                                    'EnviarListaTemplate': True
+                                                }
+                                                
+                                                agendamentos_criados = 0
+                                                for grupo, crachas in grupo_crachas.items():
+                                                    if crachas:
+                                                        clock_ids = CLOCK_GROUPS.get(grupo, [])
+                                                        if clock_ids:
+                                                            novo_agendamento = AgendamentoComando(
+                                                                usuario=f"Sistema (Recorrente Desbloqueio #{command.id})",
+                                                                data_hora_execucao=get_local_now().replace(tzinfo=None),
+                                                                comandos=json.dumps(config_options),
+                                                                matriculas=json.dumps(list(crachas)),
+                                                                relogios=json.dumps(clock_ids),
+                                                                status='Pendente'
+                                                            )
+                                                            db.add(novo_agendamento)
+                                                            db.flush() # Gerar ID do agendamento
+                                                            
+                                                            f_log.write(f" -> Criado agendamento #{novo_agendamento.id} para o local '{grupo}' com as chapas: {list(crachas)}\n")
+                                                            f_log.flush()
+                                                            agendamentos_criados += 1
+                                                
+                                                if agendamentos_criados > 0:
+                                                    db.commit()
+                                                    f_log.write(f"\nTotal de {agendamentos_criados} agendamentos gerados com sucesso na fila imediata.\n")
+                                                else:
+                                                    f_log.write("\nNenhum agendamento gerado (nenhum local correspondente encontrado).\n")
+                                                f_log.flush()
+                                        elif command.tipo == 'bloqueio_ferias':
+                                            f_log.write("Iniciando rotina de Bloqueio de Férias...\n")
+                                            f_log.flush()
+                                            
+                                            # 1. Obter data de início das férias desejada (hoje)
+                                            hoje = now.date()
+                                            dt_ini_start = datetime.datetime(hoje.year, hoje.month, hoje.day, 0, 0, 0)
+                                            dt_ini_end = datetime.datetime(hoje.year, hoje.month, hoje.day, 23, 59, 59)
+                                            
+                                            f_log.write(f"Filtrando pessoas com Início das Férias em: {hoje.strftime('%d/%m/%Y')}\n")
+                                            f_log.flush()
+                                            
+                                            # 2. Consultar pessoas
+                                            pessoas = db.query(Pessoa).filter(
+                                                Pessoa.data_inicio_ferias != None,
+                                                Pessoa.data_inicio_ferias >= dt_ini_start,
+                                                Pessoa.data_inicio_ferias <= dt_ini_end
+                                            ).all()
+                                            
+                                            if not pessoas:
+                                                f_log.write("Nenhuma pessoa encontrada com início das férias na data atual.\n")
+                                                f_log.flush()
+                                            else:
+                                                funcionarios = [int(p.chapa) for p in pessoas if p.chapa and str(p.chapa).isdigit()]
+                                                f_log.write(f"Encontrados {len(pessoas)} colaboradores:\n")
+                                                for p in pessoas:
+                                                    f_log.write(f" - Chapa: {p.chapa} | Nome: {p.nome}\n")
+                                                f_log.write("\n")
+                                                f_log.flush()
+                                                
+                                                if not funcionarios:
+                                                    f_log.write("Nenhuma chapa numérica válida para bloqueio.\n")
+                                                    f_log.flush()
+                                                else:
+                                                    # 3. Buscar todos os relógios ativos
+                                                    f_log.write("Buscando relógios cadastrados no sistema...\n")
+                                                    f_log.flush()
+                                                    
+                                                    relogios = fetch_clocks()
+                                                    relogio_list = []
+                                                    if relogios:
+                                                        for r in relogios:
+                                                            num = r.get('RelogioNumero')
+                                                            if num is not None:
+                                                                try:
+                                                                    relogio_list.append(int(num))
+                                                                except ValueError:
+                                                                    pass
+                                                    
+                                                    if not relogio_list:
+                                                        f_log.write("Nenhum relógio válido cadastrado encontrado para envio.\n")
+                                                        f_log.flush()
+                                                    else:
+                                                        f_log.write(f"Relógios encontrados ({len(relogio_list)}): {relogio_list}\n")
+                                                        f_log.write("Agendando comandos de bloqueio (Excluir Lista de Credenciais e Excluir Lista de Pessoas) na fila imediata...\n")
+                                                        f_log.flush()
+                                                        
+                                                        # 4. Configurar comandos de bloqueio
+                                                        config_options = {
+                                                            "ExcluirListaCredenciais": True,
+                                                            "ExcluirListaPessoas": True
+                                                        }
+                                                        
+                                                        # 5. Criar agendamento imediato
+                                                        novo_agendamento = AgendamentoComando(
+                                                            usuario=f"Sistema (Recorrente Bloqueio #{command.id})",
+                                                            data_hora_execucao=get_local_now().replace(tzinfo=None),
+                                                            comandos=json.dumps(config_options),
+                                                            matriculas=json.dumps(funcionarios),
+                                                            relogios=json.dumps(relogio_list),
+                                                            status='Pendente'
+                                                        )
+                                                        db.add(novo_agendamento)
+                                                        db.flush() # Gerar ID do agendamento
+                                                        
+                                                        f_log.write(f" -> Criado agendamento de bloqueio imediato #{novo_agendamento.id} para todos os relógios.\n")
+                                                        f_log.write("Processamento de bloqueio concluído com sucesso.\n")
+                                                        f_log.flush()
                                         
                                         f_log.write(f"\n--- FIM DA EXECUÇÃO EM {get_local_now().strftime('%d/%m/%Y %H:%M:%S')} ---\n")
                                     
@@ -1680,10 +1906,10 @@ def generate_reports_for_job(job, pesquisa_falha, crachas_sucesso, comandos_obj,
                 'mensagem': p.get('mensagem', ''),
                 'dataDesligamento': p.get('dataDesligamento')
             })
-        file_path = os.path.join(app_root, 'static', log_file_name)
+        file_path = os.path.join(app_root, 'static', 'documents', log_file_name)
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(normalized, f, indent=2, ensure_ascii=False)
-        falha_file_name = log_file_name
+        falha_file_name = f'documents/{log_file_name}'
 
     if crachas_sucesso:
         if isinstance(comandos_obj, list):
@@ -1694,11 +1920,11 @@ def generate_reports_for_job(job, pesquisa_falha, crachas_sucesso, comandos_obj,
             cmds_dict = {'Comando': True}
 
         cabecalho = generate_cabecalho_arquivo(relogio_list, cmds_dict)
-        sucesso_file_name = f'sucesso_agendamento_{job.id}.pdf'
+        sucesso_file_name_raw = f'sucesso_agendamento_{job.id}.pdf'
         sucesso_content = [f"Crachá: {c.get('cracha')}, Nome: {c.get('nome')}" for c in crachas_sucesso]
-        pdf_path = os.path.join(app_root, 'static', sucesso_file_name)
+        pdf_path = os.path.join(app_root, 'static', 'documents', sucesso_file_name_raw)
         generate_pdf_report(pdf_path, cabecalho, sucesso_content)
-        sucesso_file_name = sucesso_file_name
+        sucesso_file_name = f'documents/{sucesso_file_name_raw}'
 
     return sucesso_file_name, falha_file_name
 
@@ -2023,18 +2249,18 @@ def api_envio_comando_associar():
                     'mensagem': p.get('mensagem', ''),
                     'dataDesligamento': p.get('dataDesligamento')
                 })
-            with open(os.path.join(app.root_path, 'static', log_file_name), 'w', encoding='utf-8') as f:
+            with open(os.path.join(app.root_path, 'static', 'documents', log_file_name), 'w', encoding='utf-8') as f:
                 json.dump(normalized, f, indent=2, ensure_ascii=False)
-            falha_file_name = log_file_name
+            falha_file_name = f'documents/{log_file_name}'
             
         if crachas_sucesso:
             cabecalho = generate_cabecalho_arquivo(relogio_list, comandos_list)
             sucesso_content = [f"Crachá: {c.get('cracha')}, Nome: {c.get('nome')}" for c in crachas_sucesso]
             sucesso_file_name = 'sucesso_associacao.pdf'
-            generate_pdf_report(os.path.join(app.root_path, 'static', sucesso_file_name), cabecalho, sucesso_content)
+            generate_pdf_report(os.path.join(app.root_path, 'static', 'documents', sucesso_file_name), cabecalho, sucesso_content)
         
         if associacao_falha:
-             with open(os.path.join(app.root_path, 'static', 'falhas_associacao.json'), 'w', encoding='utf-8') as f:
+             with open(os.path.join(app.root_path, 'static', 'documents', 'falhas_associacao.json'), 'w', encoding='utf-8') as f:
                 json.dump(associacao_falha, f, indent=2, ensure_ascii=False)
                 
         response_payload = {
@@ -2045,7 +2271,7 @@ def api_envio_comando_associar():
                 'falhasPesquisa': len(pesquisa_falha),
                 'falhasAssociacao': len(associacao_falha)
             },
-            'sucessoFileName': 'sucesso_associacao.pdf'
+            'sucessoFileName': 'documents/sucesso_associacao.pdf'
         }
         
         if falha_file_name:
@@ -2125,12 +2351,14 @@ def api_envio_comando_desligar():
         if crachas_sucesso:
             sucesso_file_name = 'sucesso_desligamento.pdf'
             sucesso_content = [f"Crachá: {c.get('cracha')}, Nome: {c.get('nome')}, Data de Desligamento: {c.get('dataDesligamento')}" for c in crachas_sucesso]
-            generate_pdf_report(os.path.join(app.root_path, 'static', sucesso_file_name), "Funcionários Desligados\n\n", sucesso_content)
+            generate_pdf_report(os.path.join(app.root_path, 'static', 'documents', sucesso_file_name), "Funcionários Desligados\n\n", sucesso_content)
+            sucesso_file_name = f'documents/{sucesso_file_name}'
             
         if crachas_falha:
             falha_file_name = 'falha_desligamento.json'
-            with open(os.path.join(app.root_path, 'static', falha_file_name), 'w', encoding='utf-8') as f:
+            with open(os.path.join(app.root_path, 'static', 'documents', falha_file_name), 'w', encoding='utf-8') as f:
                 json.dump(crachas_falha, f, indent=2, ensure_ascii=False)
+            falha_file_name = f'documents/{falha_file_name}'
                 
         log_action(f"Processado desligamento de {len(cracha_list)} funcionários")
         return jsonify({

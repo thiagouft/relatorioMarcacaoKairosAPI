@@ -1,4 +1,6 @@
 import pyodbc
+import os
+import shutil
 from sqlalchemy import create_engine, inspect, text
 from db_setup import Base, Config
 
@@ -67,7 +69,77 @@ def upgrade_database_schema():
                         except Exception as e:
                             print(f"    [Erro] Falha ao injetar '{column.name}': {e}")
 
+    migrate_physical_files_and_db_paths(engine)
     print("\nAtualização de Banco de Dados finalizada! Suas informações de produção estão a salvo.")
+
+def migrate_physical_files_and_db_paths(engine):
+    print("\nIniciando migração física de arquivos e caminhos no banco de dados...")
+    
+    # 1. Migração física dos arquivos
+    static_path = os.path.join(os.path.dirname(__file__), 'static')
+    documents_path = os.path.join(static_path, 'documents')
+    
+    # Garante a existência da pasta documents
+    if not os.path.exists(documents_path):
+        os.makedirs(documents_path, exist_ok=True)
+        print(f"Diretório de documentos criado em: {documents_path}")
+        
+    if os.path.exists(static_path):
+        moved_count = 0
+        for filename in os.listdir(static_path):
+            file_path = os.path.join(static_path, filename)
+            # Apenas arquivos (não diretórios) com extensões conhecidas na raiz de static
+            if os.path.isfile(file_path):
+                ext = os.path.splitext(filename)[1].lower()
+                if ext in ['.pdf', '.txt', '.json']:
+                    dest_path = os.path.join(documents_path, filename)
+                    try:
+                        shutil.move(file_path, dest_path)
+                        moved_count += 1
+                        print(f"  [Mover] {filename} -> static/documents/{filename}")
+                    except Exception as move_err:
+                        print(f"  [Erro Mover] Falha ao mover {filename}: {move_err}")
+        print(f"Total de arquivos físicos movidos para a pasta 'documents': {moved_count}")
+        
+    # 2. Atualização dos caminhos no banco de dados
+    with engine.connect() as conn:
+        try:
+            # Atualiza agendamento_comandos (sucesso_file)
+            r1 = conn.execute(text("""
+                UPDATE agendamento_comandos 
+                SET sucesso_file = 'documents/' + sucesso_file 
+                WHERE sucesso_file IS NOT NULL 
+                  AND sucesso_file <> '' 
+                  AND sucesso_file NOT LIKE 'documents/%'
+            """))
+            
+            # Atualiza agendamento_comandos (falha_file)
+            r2 = conn.execute(text("""
+                UPDATE agendamento_comandos 
+                SET falha_file = 'documents/' + falha_file 
+                WHERE falha_file IS NOT NULL 
+                  AND falha_file <> '' 
+                  AND falha_file NOT LIKE 'documents/%'
+            """))
+            
+            # Atualiza comandos_recorrentes (log_file)
+            r3 = conn.execute(text("""
+                UPDATE comandos_recorrentes 
+                SET log_file = 'documents/' + log_file 
+                WHERE log_file IS NOT NULL 
+                  AND log_file <> '' 
+                  AND log_file NOT LIKE 'documents/%'
+            """))
+            
+            conn.commit()
+            print(f"Caminhos atualizados no banco de dados:")
+            print(f"  - agendamento_comandos (sucesso_file): {r1.rowcount} linhas")
+            print(f"  - agendamento_comandos (falha_file): {r2.rowcount} linhas")
+            print(f"  - comandos_recorrentes (log_file): {r3.rowcount} linhas")
+        except Exception as db_err:
+            print(f"[Erro DB] Falha ao atualizar caminhos no banco de dados: {db_err}")
+            
+    print("Migração de arquivos e banco de dados finalizada com sucesso!\n")
 
 if __name__ == "__main__":
     upgrade_database_schema()

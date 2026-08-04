@@ -25,7 +25,7 @@
                 <form id="agendamentoForm">
                     <div class="form-group">
                         <label for="data_hora_execucao"><strong>Data e Hora da Execução:</strong></label>
-                        <input type="text" id="data_hora_execucao" name="data_hora_execucao" placeholder="DD/MM/AAAA HH:MM" required style="width: 100%; padding: 0.6rem; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 1rem; margin-top: 0.3rem;" />
+                        <input type="datetime-local" id="data_hora_execucao" name="data_hora_execucao" required style="width: 100%; padding: 0.6rem; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 1rem; margin-top: 0.3rem; font-family: 'Inter', sans-serif;" />
                     </div>
 
                     <div class="form-group" style="margin-top: 1rem;">
@@ -137,7 +137,20 @@
                 return `${dia}/${mes}/${ano} ${hora}:${minuto}`;
             }
 
+            function getFormatDataHoraAtualIso() {
+                const agora = new Date();
+                const dia = String(agora.getDate()).padStart(2, '0');
+                const mes = String(agora.getMonth() + 1).padStart(2, '0');
+                const ano = agora.getFullYear();
+                const hora = String(agora.getHours()).padStart(2, '0');
+                const minuto = String(agora.getMinutes()).padStart(2, '0');
+                return `${ano}-${mes}-${dia}T${hora}:${minuto}`;
+            }
+
             function convertBrToIso(dataHoraBr) {
+                if (dataHoraBr.includes('T')) {
+                    return dataHoraBr;
+                }
                 const regex = /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})$/;
                 const match = dataHoraBr.trim().match(regex);
                 if (!match) return null;
@@ -147,7 +160,7 @@
 
             const inputDataHora = document.getElementById("data_hora_execucao");
             if (inputDataHora) {
-                inputDataHora.value = getFormatDataHoraAtual();
+                inputDataHora.value = getFormatDataHoraAtualIso();
             }
 
             const gruposRelogios = window.gruposRelogios || {};

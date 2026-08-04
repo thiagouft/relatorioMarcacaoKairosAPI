@@ -10,7 +10,20 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${dia}/${mes}/${ano} ${hora}:${minuto}`;
     }
 
+    function getFormatDataHoraAtualIso() {
+        const agora = new Date();
+        const dia = String(agora.getDate()).padStart(2, '0');
+        const mes = String(agora.getMonth() + 1).padStart(2, '0');
+        const ano = agora.getFullYear();
+        const hora = String(agora.getHours()).padStart(2, '0');
+        const minuto = String(agora.getMinutes()).padStart(2, '0');
+        return `${ano}-${mes}-${dia}T${hora}:${minuto}`;
+    }
+
     function convertBrToIso(dataHoraBr) {
+        if (dataHoraBr.includes('T')) {
+            return dataHoraBr;
+        }
         const regex = /^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})$/;
         const match = dataHoraBr.trim().match(regex);
         if (!match) return null;
@@ -288,7 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             modalAgendamento.style.display = "flex";
             if (inputDataHoraModal) {
-                inputDataHoraModal.value = getFormatDataHoraAtual();
+                inputDataHoraModal.value = getFormatDataHoraAtualIso();
             }
         });
 
