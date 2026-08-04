@@ -2075,8 +2075,16 @@ def api_agendamento_comandos_listar():
             try:
                 rels = json.loads(a.relogios)
                 qtd_rels = len(rels)
+                
+                # Mapear locais de ponto correspondentes aos relógios
+                grupos_associados = []
+                for grupo_nome, grupo_ids in CLOCK_GROUPS.items():
+                    if any(rid in grupo_ids for rid in rels):
+                        grupos_associados.append(grupo_nome)
+                locais_str = ", ".join(sorted(grupos_associados)) if grupos_associados else "-"
             except Exception:
                 qtd_rels = 0
+                locais_str = "-"
 
             lista.append({
                 'id': a.id,
@@ -2085,6 +2093,7 @@ def api_agendamento_comandos_listar():
                 'comandos_str': cmds_str,
                 'qtd_matriculas': qtd_mats,
                 'qtd_relogios': qtd_rels,
+                'locais_ponto': locais_str,
                 'status': a.status,
                 'resultado': a.resultado,
                 'sucesso_file': a.sucesso_file,

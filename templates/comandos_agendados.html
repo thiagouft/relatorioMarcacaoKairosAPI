@@ -166,6 +166,9 @@
                                 <input type="checkbox" class="col-toggle-checkbox" value="relogios" checked> Relógios
                             </label>
                             <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif; color: #1e293b;">
+                                <input type="checkbox" class="col-toggle-checkbox" value="locais" checked> Locais de Ponto
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif; color: #1e293b;">
                                 <input type="checkbox" class="col-toggle-checkbox" value="status" checked> Status
                             </label>
                             <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif; color: #1e293b;">
@@ -192,6 +195,7 @@
                             <th class="col-comandos">Comandos</th>
                             <th class="col-matriculas">Matrículas</th>
                             <th class="col-relogios">Relógios</th>
+                            <th class="col-locais">Locais de Ponto</th>
                             <th class="col-status">Status</th>
                             <th class="col-resultado">Resultado/Log</th>
                             <th class="col-acoes">Ações</th>
@@ -199,7 +203,7 @@
                     </thead>
                     <tbody id="tabelaAgendamentos">
                         <tr>
-                            <td colspan="9" style="text-align: center; color: #718096; padding: 2rem;">Carregando agendamentos...</td>
+                            <td colspan="10" style="text-align: center; color: #718096; padding: 2rem;">Carregando agendamentos...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -217,7 +221,7 @@
 
     <script>
         const storageKeyAgendamentos = 'agendamentos_active_columns';
-        const defaultColumnsAgendamentos = ['id', 'data', 'usuario', 'comandos', 'matriculas', 'relogios', 'status', 'resultado', 'acoes'];
+        const defaultColumnsAgendamentos = ['id', 'data', 'usuario', 'comandos', 'matriculas', 'relogios', 'locais', 'status', 'resultado', 'acoes'];
 
         const loadAgendamentosActiveColumns = () => {
             const stored = JSON.parse(localStorage.getItem(storageKeyAgendamentos));
@@ -327,7 +331,7 @@
                 const data = await response.json();
 
                 if (!data.sucesso || !data.agendamentos || data.agendamentos.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #718096; padding: 2rem;">Nenhum comando agendado no momento.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: #718096; padding: 2rem;">Nenhum comando agendado no momento.</td></tr>';
                     updateAgendamentosColumnsVisibility();
                     return;
                 }
@@ -368,6 +372,7 @@
                         <td class="col-comandos">${item.comandos_str}</td>
                         <td class="col-matriculas">${item.qtd_matriculas} matrículas</td>
                         <td class="col-relogios">${item.qtd_relogios} relógios</td>
+                        <td class="col-locais">${item.locais_ponto || '-'}</td>
                         <td class="col-status"><span class="badge ${statusBadgeClass}">${item.status}</span></td>
                         <td class="col-resultado"><small style="color: #4a5568;">${item.resultado || '-'}</small></td>
                         <td class="col-acoes" style="white-space: nowrap; vertical-align: middle;">${acoesTd}</td>
@@ -380,7 +385,7 @@
 
             } catch (err) {
                 console.error('Erro ao listar agendamentos:', err);
-                tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #e53e3e; padding: 2rem;">Erro ao carregar lista de agendamentos.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: #e53e3e; padding: 2rem;">Erro ao carregar lista de agendamentos.</td></tr>';
                 updateAgendamentosColumnsVisibility();
             }
         }
