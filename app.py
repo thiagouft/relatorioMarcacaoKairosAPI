@@ -849,10 +849,29 @@ def api_intersticio_desbloquear():
                 erros.append(f"Matrícula {matricula} não possui relógios válidos no último mês e nenhum relógio ativo.")
                 continue
                 
-            key = (liberacao_dt.strftime('%Y-%m-%d %H:%M:%S'), tuple(sorted(clock_ids)))
-            if key not in agrupamentos:
-                agrupamentos[key] = []
-            agrupamentos[key].append(int(matricula))
+            # Identificar a quais grupos de relógios (locais de ponto) a matrícula pertence
+            grupos_associados = []
+            for grupo_nome, grupo_ids in CLOCK_GROUPS.items():
+                if any(rid in grupo_ids for rid in clock_ids):
+                    grupos_associados.append(grupo_nome)
+            
+            if not grupos_associados:
+                # Caso a matrícula não pertença a nenhum grupo de CLOCK_GROUPS, agrupa pelos relógios específicos dela
+                key = (liberacao_dt.strftime('%Y-%m-%d %H:%M:%S'), None, tuple(sorted(clock_ids)))
+                if key not in agrupamentos:
+                    agrupamentos[key] = []
+                if int(matricula) not in agrupamentos[key]:
+                    agrupamentos[key].append(int(matricula))
+            else:
+                for grupo_nome in grupos_associados:
+                    # Agrupa pelo local de ponto, contendo todos os relógios do grupo
+                    grupo_clock_ids = CLOCK_GROUPS[grupo_nome]
+                    key = (liberacao_dt.strftime('%Y-%m-%d %H:%M:%S'), grupo_nome, tuple(sorted(grupo_clock_ids)))
+                    if key not in agrupamentos:
+                        agrupamentos[key] = []
+                    if int(matricula) not in agrupamentos[key]:
+                        agrupamentos[key].append(int(matricula))
+            
             processados_count += 1
             
         agendamentos_criados = []
@@ -861,7 +880,7 @@ def api_intersticio_desbloquear():
             'EnviarListaTemplate': True
         }
         
-        for (exec_dt_str, clock_ids_tuple), matriculas_lote in agrupamentos.items():
+        for (exec_dt_str, grupo_nome, clock_ids_tuple), matriculas_lote in agrupamentos.items():
             exec_dt = datetime.datetime.strptime(exec_dt_str, '%Y-%m-%d %H:%M:%S')
             
             novo_agendamento = AgendamentoComando(
@@ -875,7 +894,8 @@ def api_intersticio_desbloquear():
             db.add(novo_agendamento)
             db.commit()
             agendamentos_criados.append(novo_agendamento.id)
-            log_action(f"Agendou desbloqueio do interstício #{novo_agendamento.id} para {len(matriculas_lote)} funcionários às {exec_dt_str}")
+            local_info = f"local {grupo_nome}" if grupo_nome else f"relógios {list(clock_ids_tuple)}"
+            log_action(f"Agendou desbloqueio do interstício #{novo_agendamento.id} para {len(matriculas_lote)} funcionários no {local_info} às {exec_dt_str}")
             
         db.close()
         
@@ -2070,6 +2090,7 @@ def api_agendamento_comandos_listar():
                 mats = json.loads(a.matriculas)
                 qtd_mats = len(mats)
             except Exception:
+                mats = []
                 qtd_mats = 0
 
             try:
@@ -2092,6 +2113,7 @@ def api_agendamento_comandos_listar():
                 'data_hora_execucao': a.data_hora_execucao.strftime('%d/%m/%Y %H:%M'),
                 'comandos_str': cmds_str,
                 'qtd_matriculas': qtd_mats,
+                'matriculas': mats,
                 'qtd_relogios': qtd_rels,
                 'locais_ponto': locais_str,
                 'status': a.status,

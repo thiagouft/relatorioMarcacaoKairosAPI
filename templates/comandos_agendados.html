@@ -222,6 +222,7 @@
     <script>
         const storageKeyAgendamentos = 'agendamentos_active_columns';
         const defaultColumnsAgendamentos = ['id', 'data', 'usuario', 'comandos', 'matriculas', 'relogios', 'locais', 'status', 'resultado', 'acoes'];
+        let agendamentosCarregados = [];
 
         const loadAgendamentosActiveColumns = () => {
             const stored = JSON.parse(localStorage.getItem(storageKeyAgendamentos));
@@ -288,8 +289,12 @@
 
             window.onclick = function (event) {
                 var deleteModal = document.getElementById('deleteConfirmModal');
+                var matriculasModal = document.getElementById('matriculasModal');
                 if (event.target == deleteModal) {
                     closeDeleteModal();
+                }
+                if (event.target == matriculasModal) {
+                    closeMatriculasModal();
                 }
             }
 
@@ -329,6 +334,8 @@
             try {
                 const response = await fetch('/api/agendamento_comandos/listar');
                 const data = await response.json();
+                
+                agendamentosCarregados = data.agendamentos || [];
 
                 if (!data.sucesso || !data.agendamentos || data.agendamentos.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: #718096; padding: 2rem;">Nenhum comando agendado no momento.</td></tr>';
@@ -370,7 +377,11 @@
                         <td class="col-data"><strong>${item.data_hora_execucao}</strong></td>
                         <td class="col-usuario">${item.usuario || '-'}</td>
                         <td class="col-comandos">${item.comandos_str}</td>
-                        <td class="col-matriculas">${item.qtd_matriculas} matrículas</td>
+                        <td class="col-matriculas">
+                            <span style="cursor: pointer; text-decoration: underline; color: #2b6cb0; font-weight: 500;" onclick="verMatriculas(${item.id})" title="Clique para ver as matrículas">
+                                ${item.qtd_matriculas} matrículas
+                            </span>
+                        </td>
                         <td class="col-relogios">${item.qtd_relogios} relógios</td>
                         <td class="col-locais">${item.locais_ponto || '-'}</td>
                         <td class="col-status"><span class="badge ${statusBadgeClass}">${item.status}</span></td>
@@ -422,6 +433,44 @@
                 showAlert('Erro na solicitação ao servidor.', 'danger');
             }
         }
+
+        function verMatriculas(id) {
+            const agendamento = agendamentosCarregados.find(item => item.id === id);
+            if (!agendamento) return;
+            
+            document.getElementById('matriculasModalTitle').innerText = `Matrículas do Agendamento #${id}`;
+            
+            const mats = agendamento.matriculas || [];
+            document.getElementById('matriculasTotalCount').innerText = mats.length;
+            
+            const container = document.getElementById('matriculasListContainer');
+            if (mats.length === 0) {
+                container.innerHTML = '<span style="color: #718096; font-style: italic;">Nenhuma matrícula cadastrada.</span>';
+            } else {
+                container.innerHTML = mats.join(', ');
+            }
+            
+            document.getElementById('matriculasModal').style.display = 'block';
+        }
+
+        function closeMatriculasModal() {
+            document.getElementById('matriculasModal').style.display = 'none';
+        }
+
+        function copiarMatriculas() {
+            const container = document.getElementById('matriculasListContainer');
+            const texto = container.innerText;
+            if (!texto || texto.includes('Nenhuma matrícula')) {
+                showAlert('Não há matrículas para copiar.', 'danger');
+                return;
+            }
+            navigator.clipboard.writeText(texto).then(() => {
+                showAlert('Matrículas copiadas para a área de transferência!', 'success');
+            }).catch(err => {
+                console.error('Erro ao copiar matrículas: ', err);
+                showAlert('Erro ao copiar para a área de transferência.', 'danger');
+            });
+        }
     </script>
     <!-- Modal de Confirmação de Exclusão -->
     <div id="deleteConfirmModal" class="modal" style="display: none;">
@@ -440,6 +489,33 @@
                 </button>
                 <button type="button" class="btn btn-danger" style="flex: 1; padding: 10px; background-color: var(--error-red); color: white;" id="btnConfirmDelete">
                     Sim, Remover
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Visualizar Matrículas -->
+    <div id="matriculasModal" class="modal" style="display: none;">
+        <div class="modal-content card" style="max-width: 500px; text-align: left; padding: 2rem;">
+            <span class="close" onclick="closeMatriculasModal()"
+                style="color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; margin-top: -15px; margin-right: -10px;">&times;</span>
+            <h3 style="margin-top:0; color: #2d3748; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;" id="matriculasModalTitle">Matrículas do Agendamento</h3>
+            
+            <div style="margin-top: 1rem; margin-bottom: 1rem;">
+                <p style="font-size: 0.95rem; color: #4a5568; margin-bottom: 0.5rem;">
+                    Total de matrículas agendadas: <strong id="matriculasTotalCount">0</strong>
+                </p>
+                <div id="matriculasListContainer" style="max-height: 250px; overflow-y: auto; background-color: #f7fafc; padding: 1rem; border-radius: 6px; border: 1px solid #e2e8f0; font-family: monospace; font-size: 0.95rem; line-height: 1.6; word-break: break-all;">
+                    <!-- Matrículas listadas aqui -->
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 1.5rem;">
+                <button type="button" class="btn" style="background-color: var(--primary-blue); color: white; padding: 8px 16px; font-size: 0.85rem;" onclick="copiarMatriculas()">
+                    📋 Copiar Matrículas
+                </button>
+                <button type="button" class="btn" style="background-color: var(--border-gray); color: var(--dark-bg); padding: 8px 16px; font-size: 0.85rem;" onclick="closeMatriculasModal()">
+                    Fechar
                 </button>
             </div>
         </div>
