@@ -49,7 +49,7 @@ CLOCK_GROUPS = {
     "TERRAPLENAGEM III": [6, 12],
     "TENDA MOTORISTAS III": [26],
     "NAUTICA": [30],
-    "PI SAO FELIX": [33, 34],
+    "PI SAO FELIX": [33, 34, 35, 36],
     "CENTRAL DE CONCRETO III": [7, 15],
     "P12": [27, 32]
 }
@@ -997,7 +997,7 @@ CLOCK_GROUPS = {
   "TERRAPLENAGEM III": [6, 12],
   "TENDA MOTORISTAS III": [26],
   "NAUTICA": [30],
-  "PI SAO FELIX": [35,36],
+  "PI SAO FELIX": [33, 34, 35, 36],
   "CENTRAL DE CONCRETO III": [7, 15],
   "P12": [27, 32],
 }
@@ -1583,8 +1583,8 @@ def process_scheduled_commands_worker():
 
                     if crachas_sucesso:
                         cracha_list = [c.get('cracha') for c in crachas_sucesso]
-                        # Mapeia IDs de banco de dados/URL (35, 36) para os números de relógio reais da API (33, 34)
-                        mapped_clock_ids = [33 if cid == 35 else 34 if cid == 36 else cid for cid in relogio_list]
+                        # Mapeia IDs de banco de dados/URL (35, 36) para os números de relógio reais da API (33, 34) e remove duplicatas
+                        mapped_clock_ids = list(dict.fromkeys([33 if cid == 35 else 34 if cid == 36 else cid for cid in relogio_list]))
                         schedule_result = schedule_commands(cracha_list, comandos_obj, mapped_clock_ids)
                         if schedule_result.get('sucesso'):
                             job.status = 'Executado'
@@ -1600,7 +1600,7 @@ def process_scheduled_commands_worker():
 
                     # Gerar arquivos de sucesso (PDF) e falha (TXT) automaticamente
                     try:
-                        mapped_clock_ids = [33 if cid == 35 else 34 if cid == 36 else cid for cid in relogio_list]
+                        mapped_clock_ids = list(dict.fromkeys([33 if cid == 35 else 34 if cid == 36 else cid for cid in relogio_list]))
                         sucesso_f, falha_f = generate_reports_for_job(job, pesquisa_falha, crachas_sucesso, comandos_obj, mapped_clock_ids, app.root_path)
                         job.sucesso_file = sucesso_f
                         job.falha_file = falha_f
