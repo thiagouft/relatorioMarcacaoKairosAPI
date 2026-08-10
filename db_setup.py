@@ -119,6 +119,8 @@ class ComandoRecorrente(Base):
     hora_execucao = Column(String(5), nullable=False)  # Formato 'HH:MM'
     ultimo_disparo = Column(DateTime, nullable=True)  # Data/hora UTC do último disparo diário
     log_file = Column(String(500), nullable=True)  # Nome do arquivo da última execução (.txt)
+    enviar_email = Column(Boolean, default=False, nullable=True)
+    emails_destino = Column(String(500), nullable=True)  # E-mails de destino separados por vírgula
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 

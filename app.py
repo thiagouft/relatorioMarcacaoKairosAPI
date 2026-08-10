@@ -17,6 +17,11 @@ from reportlab.lib.pagesizes import landscape, letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 import os
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 import werkzeug.utils
 
 # Import utility functions for comando
@@ -104,6 +109,161 @@ def log_action(action):
         print(f"Error logging action: {e}")
     finally:
         db.close()
+
+def enviar_email_log(recorrente_id, tipo, data_hora_str, log_filepath, destinatario_email):
+    smtp_server = os.environ.get('SMTP_SERVER') or 'mixestec.com.br'
+    try:
+        smtp_port = int(os.environ.get('SMTP_PORT') or 465)
+    except:
+        smtp_port = 465
+    smtp_user = os.environ.get('SMTP_USER') or 'form@mixestec.com.br'
+    smtp_password = os.environ.get('SMTP_PASSWORD') or '8X5n9yqi!yer'
+    smtp_sender = os.environ.get('SMTP_SENDER') or 'form@mixestec.com.br'
+    
+    if not destinatario_email:
+        destinatario_email = [os.environ.get('SMTP_DEFAULT_RECIPIENT') or smtp_user]
+    elif isinstance(destinatario_email, str):
+        destinatario_email = [destinatario_email]
+        
+    tipos_nome = {
+        'datahora': 'Envio de Data e Hora',
+        'ponteiro': 'Reposição de Ponteiro',
+        'desbloqueio_ferias': 'Desbloqueio de Férias',
+        'bloqueio_ferias': 'Bloqueio de Férias',
+        'verificacao_conclusao': 'Verificação de Conclusão de comando'
+    }
+    tipo_bonito = tipos_nome.get(tipo, tipo)
+    
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = f"Relatório de Execução: Recorrência #{recorrente_id} ({tipo_bonito})"
+    msg['From'] = smtp_sender
+    msg['To'] = ", ".join(destinatario_email)
+    
+    html_content = f"""
+    <html>
+    <head>
+        <style>
+            body {{
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                color: #2d3748;
+                background-color: #f7fafc;
+                margin: 0;
+                padding: 0;
+            }}
+            .container {{
+                max-width: 600px;
+                margin: 30px auto;
+                background: #ffffff;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+                overflow: hidden;
+                border: 1px solid #e2e8f0;
+            }}
+            .header {{
+                background-color: #2b6cb0;
+                color: #ffffff;
+                padding: 30px 20px;
+                text-align: center;
+            }}
+            .header h1 {{
+                margin: 0;
+                font-size: 24px;
+                font-weight: 600;
+            }}
+            .content {{
+                padding: 30px 20px;
+                line-height: 1.6;
+            }}
+            .meta-table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin: 20px 0;
+            }}
+            .meta-table td {{
+                padding: 10px;
+                border-bottom: 1px solid #edf2f7;
+            }}
+            .meta-table td.label {{
+                font-weight: bold;
+                color: #4a5568;
+                width: 35%;
+            }}
+            .footer {{
+                background-color: #f7fafc;
+                text-align: center;
+                padding: 20px;
+                font-size: 12px;
+                color: #a0aec0;
+                border-top: 1px solid #edf2f7;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>Relatório de Execução de Comando</h1>
+            </div>
+            <div class="content">
+                <p>Olá,</p>
+                <p>O comando recorrente agendado foi executado e concluído pelo sistema automático. Veja os detalhes abaixo:</p>
+                
+                <table class="meta-table">
+                    <tr>
+                        <td class="label">ID da Recorrência:</td>
+                        <td>#{recorrente_id}</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Tipo de Comando:</td>
+                        <td><strong>{tipo_bonito}</strong></td>
+                    </tr>
+                    <tr>
+                        <td class="label">Data/Hora Execução:</td>
+                        <td>{data_hora_str}</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Status:</td>
+                        <td><span style="color: #38a169; font-weight: bold;">Finalizado</span></td>
+                    </tr>
+                </table>
+                
+                <p>O arquivo de log completo da execução foi anexado a este e-mail para sua referência e análise.</p>
+            </div>
+            <div class="footer">
+                Este e-mail foi gerado automaticamente pelo Sistema de Relatórios Kairos CPRT.<br>
+                Não responda a este e-mail.
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    
+    part_html = MIMEText(html_content, 'html')
+    msg.attach(part_html)
+    
+    if log_filepath and os.path.exists(log_filepath):
+        try:
+            with open(log_filepath, 'rb') as f_attachment:
+                part = MIMEBase('application', 'octet-stream')
+                part.set_payload(f_attachment.read())
+                encoders.encode_base64(part)
+                part.add_header(
+                    'Content-Disposition',
+                    f'attachment; filename={os.path.basename(log_filepath)}'
+                )
+                msg.attach(part)
+        except Exception as att_err:
+            print(f"[EMAIL SMTPLIB] Erro ao anexar arquivo de log: {att_err}")
+            
+    try:
+        server = smtplib.SMTP_SSL(smtp_server, smtp_port)
+        server.login(smtp_user, smtp_password)
+        server.sendmail(smtp_sender, destinatario_email, msg.as_string())
+        server.quit()
+        print(f"[EMAIL SMTPLIB] E-mail enviado com sucesso para {', '.join(destinatario_email)}.")
+        return True
+    except Exception as smtp_err:
+        print(f"[EMAIL SMTPLIB] Falha ao enviar e-mail via SMTP SSL: {smtp_err}")
+        return False
 
 @app.route('/')
 def index():
@@ -389,6 +549,8 @@ def criar_comando_recorrente():
         tipo = request.form.get('tipo')  # 'datahora' ou 'ponteiro'
         data_inicio_str = request.form.get('data_inicio')  # 'YYYY-MM-DD'
         hora_execucao = request.form.get('hora_execucao')  # 'HH:MM'
+        enviar_email = 'enviar_email' in request.form
+        emails_destino = request.form.get('emails_destino', '').strip() if enviar_email else None
         
         if not tipo or not data_inicio_str or not hora_execucao:
             flash('Preencha todos os campos obrigatórios.', 'danger')
@@ -401,7 +563,9 @@ def criar_comando_recorrente():
             usuario=session.get('username', 'Admin'),
             tipo=tipo,
             data_inicio=data_inicio,
-            hora_execucao=hora_execucao
+            hora_execucao=hora_execucao,
+            enviar_email=enviar_email,
+            emails_destino=emails_destino
         )
         db.add(novo)
         db.commit()
@@ -430,6 +594,48 @@ def excluir_comando_recorrente(id):
         db.close()
     except Exception as e:
         flash(f'Erro ao excluir comando recorrente: {str(e)}', 'danger')
+        
+    return redirect(url_for('comandos_recorrentes'))
+
+@app.route('/admin/comandos_recorrentes/toggle_email/<int:id>', methods=['POST'])
+@login_required
+@permission_required('envio_comando')
+def toggle_email_comando_recorrente(id):
+    try:
+        db = get_db_session()
+        comando = db.query(ComandoRecorrente).get(id)
+        if comando:
+            comando.enviar_email = not comando.enviar_email
+            db.commit()
+            status_str = "ativado" if comando.enviar_email else "desativado"
+            log_action(f"Alterou envio de e-mail do comando recorrente #{id} para {comando.enviar_email}")
+            flash(f'Envio de e-mail para o comando #{id} {status_str} com sucesso!', 'success')
+        else:
+            flash('Comando recorrente não encontrado.', 'danger')
+        db.close()
+    except Exception as e:
+        flash(f'Erro ao alterar opção de e-mail: {str(e)}', 'danger')
+        
+    return redirect(url_for('comandos_recorrentes'))
+
+@app.route('/admin/comandos_recorrentes/editar_emails/<int:id>', methods=['POST'])
+@login_required
+@permission_required('envio_comando')
+def editar_emails_comando_recorrente(id):
+    try:
+        emails_destino = request.form.get('emails_destino', '').strip()
+        db = get_db_session()
+        comando = db.query(ComandoRecorrente).get(id)
+        if comando:
+            comando.emails_destino = emails_destino
+            db.commit()
+            log_action(f"Alterou e-mails de destino do comando recorrente #{id}")
+            flash(f'E-mails de destino para o comando #{id} atualizados com sucesso!', 'success')
+        else:
+            flash('Comando recorrente não encontrado.', 'danger')
+        db.close()
+    except Exception as e:
+        flash(f'Erro ao atualizar e-mails: {str(e)}', 'danger')
         
     return redirect(url_for('comandos_recorrentes'))
 
@@ -1890,6 +2096,27 @@ def process_scheduled_commands_worker():
                                     )
                                     db.add(novo_log)
                                     db.commit()
+
+                                    if getattr(command, 'enviar_email', False):
+                                        emails_to_send = []
+                                        if getattr(command, 'emails_destino', None):
+                                            raw_emails = command.emails_destino.replace(';', ',').split(',')
+                                            emails_to_send = [e.strip() for e in raw_emails if e.strip()]
+                                            
+                                        if not emails_to_send:
+                                            creator = db.query(User).filter(User.username == command.usuario).first()
+                                            if creator and creator.email:
+                                                emails_to_send = [creator.email]
+                                                
+                                        if emails_to_send:
+                                            enviar_email_log(
+                                                recorrente_id=command.id,
+                                                tipo=command.tipo,
+                                                data_hora_str=now.strftime('%d/%m/%Y %H:%M:%S'),
+                                                log_filepath=log_filepath,
+                                                destinatario_email=emails_to_send
+                                            )
+
                                 except Exception as aut_err:
                                     print(f"[AGENDAMENTO WORKER] Erro na execução de recorrente #{command.id}: {aut_err}")
                                     try:
