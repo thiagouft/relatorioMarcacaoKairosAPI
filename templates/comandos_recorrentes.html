@@ -61,6 +61,8 @@
                                 <strong style="color: #ff9800;">🏖️ Desbloqueio de Férias</strong>
                                 {% elif cmd.tipo == 'bloqueio_ferias' %}
                                 <strong style="color: var(--error-red);">🏖️ Bloqueio de Férias</strong>
+                                {% elif cmd.tipo == 'verificacao_conclusao' %}
+                                <strong style="color: #9c27b0;">🔍 Verificação de Conclusão de comando</strong>
                                 {% else %}
                                 {{ cmd.tipo }}
                                 {% endif %}
@@ -123,6 +125,7 @@
                         <option value="ponteiro">🔗 Reposição de Ponteiro (Todos os Relógios - Data D-1)</option>
                         <option value="desbloqueio_ferias">🏖️ Desbloqueio de Férias</option>
                         <option value="bloqueio_ferias">🏖️ Bloqueio de Férias</option>
+                        <option value="verificacao_conclusao">🔍 Verificação de Conclusão de comando (Todos os Relógios)</option>
                     </select>
                 </div>
                 

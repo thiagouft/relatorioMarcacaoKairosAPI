@@ -1648,6 +1648,10 @@ def process_scheduled_commands_worker():
                                             for line in run_relogio_automation('ponteiro', data_personalizada=yesterday_str, relogio_ids=None):
                                                 f_log.write(line)
                                                 f_log.flush()
+                                        elif command.tipo == 'verificacao_conclusao':
+                                            for line in run_relogio_automation('verificacao_conclusao', relogio_ids=None):
+                                                f_log.write(line)
+                                                f_log.flush()
                                         elif command.tipo == 'desbloqueio_ferias':
                                             f_log.write("Iniciando rotina de Desbloqueio de Férias...\n")
                                             f_log.flush()

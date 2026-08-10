@@ -83,6 +83,42 @@ def run_relogio_automation(tipo, data_personalizada=None, relogio_ids=None):
             
             yield "\n🏁 Automação de Data e Hora concluída!\n"
 
+        elif tipo == 'verificacao_conclusao':
+            yield "🔍 Iniciando verificação de conclusão de comandos nos relógios...\n"
+            for i in relogio_ids:
+                advanced_url = f"https://www.dimepkairos.com.br/Dimep/Relogios/Advanced/{i}"
+                yield f"\n🔄 Verificando status dos comandos para o relógio {i}...\n"
+                try:
+                    page.goto(advanced_url, wait_until='domcontentloaded')
+                    time.sleep(1.0)
+                    
+                    status_dict = page.evaluate("""() => {
+                        const rows = Array.from(document.querySelectorAll('tr'));
+                        const results = {};
+                        for (const row of rows) {
+                            const cols = row.querySelectorAll('td');
+                            if (cols.length >= 2) {
+                                const desc = cols[0].textContent.trim();
+                                const status = cols[1].textContent.trim();
+                                if (desc.includes('Buscar status do relógio') || desc.includes('Atualizar data e hora')) {
+                                    results[desc] = status;
+                                }
+                            }
+                        }
+                        return results;
+                    }""")
+                    
+                    if not status_dict:
+                        yield f"⚠️ Relógio {i}: Tabela de agendamentos não encontrada ou sem comandos de interesse.\n"
+                    else:
+                        for desc, status in status_dict.items():
+                            yield f"  - [{desc}]: {status}\n"
+                    
+                except Exception as inner_err:
+                    yield f"❌ Erro ao verificar relógio {i}: {str(inner_err)}\n"
+                    continue
+            yield "\n🏁 Automação de Verificação de Conclusão concluída!\n"
+
         else:
             # Pointer Repositioning
             yield f"📅 Iniciando reposição do ponteiro para a data: {data_personalizada}...\n"
