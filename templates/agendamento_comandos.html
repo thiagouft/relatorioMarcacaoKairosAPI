@@ -25,17 +25,19 @@
                 <form id="agendamentoForm">
                     <div class="form-group">
                         <label for="data_hora_execucao"><strong>Data e Hora da Execução:</strong></label>
-                        <input type="datetime-local" id="data_hora_execucao" name="data_hora_execucao" required style="width: 100%; padding: 0.6rem; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 1rem; margin-top: 0.3rem; font-family: 'Inter', sans-serif;" />
+                        <input type="datetime-local" id="data_hora_execucao" name="data_hora_execucao" required
+                            style="width: 100%; padding: 0.6rem; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 1rem; margin-top: 0.3rem; font-family: 'Inter', sans-serif;" />
                     </div>
 
                     <div class="form-group" style="margin-top: 1rem;">
                         <label for="arquivo">Escolha o arquivo (.txt):</label>
                         <input type="file" id="arquivo" name="arquivo" accept=".txt" />
                     </div>
-                    
+
                     <div class="form-group">
                         <label for="matriculas">Ou digite as matrículas (separadas por vírgula):</label>
-                        <textarea id="matriculas" name="matriculas" placeholder="Ex: 12345,67890,11223" rows="3"></textarea>
+                        <textarea id="matriculas" name="matriculas" placeholder="Ex: 12345,67890,11223"
+                            rows="3"></textarea>
                     </div>
 
                     <div class="form-group">
@@ -100,7 +102,8 @@
 
     <footer class="footer">
         <div class="container footer-content">
-            <img src="{{ url_for('static', filename='images/mixestec_logo.png') }}" alt="Mixestec Logo" class="footer-logo">
+            <img src="{{ url_for('static', filename='images/mixestec_logo.png') }}" alt="Mixestec Logo"
+                class="footer-logo">
             <p>Desenvolvido por Thiago Silva Pereira</p>
         </div>
     </footer>
@@ -113,7 +116,7 @@
             "CANTEIRO III": [18, 22, 24, 25],
             "PIPE MARABA": [5, 9, 20],
             "OFICINA II": [8],
-            "PIPE SAO FELIX": [2, 4, 10, 19, 21, 28],
+            "P1": [2, 4, 10, 19, 21, 28],
             "TREINAMENTO": [16],
             "MUTRAN CANTEIRO IV": [13, 17],
             "TERRAPLENAGEM III": [6, 12],
