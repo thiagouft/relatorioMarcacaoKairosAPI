@@ -142,6 +142,11 @@ document.addEventListener('DOMContentLoaded', () => {
             relogios.push(parseInt(checkbox.value, 10));
         });
 
+        const observacaoInput = document.getElementById("observacao") ? document.getElementById("observacao").value.trim() : "";
+        if (observacaoInput) {
+            formData.append("observacao", observacaoInput);
+        }
+
         formData.append("comandos", JSON.stringify(comandos));
         formData.append("relogios", JSON.stringify(relogios));
 
@@ -347,6 +352,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     comandos[cb.value] = true;
                 });
                 formData.append("comandos", JSON.stringify(comandos));
+
+                const observacaoInput = document.getElementById("observacao") ? document.getElementById("observacao").value.trim() : "";
+                if (observacaoInput) {
+                    formData.append("observacao", observacaoInput);
+                }
 
                 const relogios = [];
                 document.querySelectorAll('input[name="relogios"]:checked').forEach((cb) => {

@@ -952,6 +952,7 @@ def api_intersticio_bloquear():
             comandos=json.dumps(config_options),
             matriculas=json.dumps(funcionarios),
             relogios=json.dumps(relogio_list),
+            observacao="Bloqueio interstício",
             status='Pendente'
         )
         db.add(novo_agendamento)
@@ -1095,6 +1096,7 @@ def api_intersticio_desbloquear():
                 comandos=json.dumps(config_options),
                 matriculas=json.dumps(matriculas_lote),
                 relogios=json.dumps(list(clock_ids_tuple)),
+                observacao="Desbloqueio do intersticio",
                 status='Pendente'
             )
             db.add(novo_agendamento)
@@ -1712,6 +1714,8 @@ def api_envio_comando_processar():
         if not funcionarios:
             return jsonify({'sucesso': False, 'mensagem': 'Nenhum funcionário fornecido.'})
             
+        observacao = request.form.get('observacao', '').strip()
+
         db = get_db_session()
         novo_agendamento = AgendamentoComando(
             usuario=session.get('username', 'Admin'),
@@ -1719,6 +1723,7 @@ def api_envio_comando_processar():
             comandos=comandos_str,
             matriculas=json.dumps(funcionarios),
             relogios=relogios_str,
+            observacao=observacao if observacao else None,
             status='Pendente'
         )
         db.add(novo_agendamento)
@@ -1990,6 +1995,7 @@ def process_scheduled_commands_worker():
                                                                 comandos=json.dumps(config_options),
                                                                 matriculas=json.dumps(list(crachas)),
                                                                 relogios=json.dumps(clock_ids),
+                                                                observacao="Desbloqueio de Férias",
                                                                 status='Pendente'
                                                             )
                                                             db.add(novo_agendamento)
@@ -2075,6 +2081,7 @@ def process_scheduled_commands_worker():
                                                             comandos=json.dumps(config_options),
                                                             matriculas=json.dumps(funcionarios),
                                                             relogios=json.dumps(relogio_list),
+                                                            observacao="Bloqueio de férias",
                                                             status='Pendente'
                                                         )
                                                         db.add(novo_agendamento)
@@ -2237,6 +2244,11 @@ def api_agendamento_comandos_criar():
         if not funcionarios:
             return jsonify({'sucesso': False, 'mensagem': 'Nenhuma matrícula válida informada.'}), 400
 
+        if request.is_json:
+            observacao = data.get('observacao', '').strip()
+        else:
+            observacao = request.form.get('observacao', '').strip()
+
         db = get_db_session()
         novo_agendamento = AgendamentoComando(
             usuario=session.get('username', 'Admin'),
@@ -2244,6 +2256,7 @@ def api_agendamento_comandos_criar():
             comandos=comandos_str,
             matriculas=json.dumps(funcionarios),
             relogios=relogios_str,
+            observacao=observacao if observacao else None,
             status='Pendente'
         )
         db.add(novo_agendamento)
@@ -2284,6 +2297,8 @@ def api_agendamento_comandos_criar_por_local():
             'EnviarListaTemplate': True
         }
 
+        observacao = data.get('observacao', '').strip() if data.get('observacao') else None
+
         db = get_db_session()
         novo_agendamento = AgendamentoComando(
             usuario=session.get('username', 'Admin'),
@@ -2291,6 +2306,7 @@ def api_agendamento_comandos_criar_por_local():
             comandos=json.dumps(comandos_dict),
             matriculas=json.dumps(crachas),
             relogios=json.dumps(clock_ids),
+            observacao=observacao,
             status='Pendente'
         )
         db.add(novo_agendamento)
@@ -2347,6 +2363,7 @@ def api_agendamento_comandos_listar():
                 'matriculas': mats,
                 'qtd_relogios': qtd_rels,
                 'locais_ponto': locais_str,
+                'observacao': a.observacao or '-',
                 'status': a.status,
                 'resultado': a.resultado,
                 'sucesso_file': a.sucesso_file,
@@ -2694,6 +2711,8 @@ def api_envio_comando_por_local():
             'EnviarListaTemplate': True
         }
 
+        observacao = data.get('observacao', '').strip() if data.get('observacao') else None
+
         db = get_db_session()
         novo_agendamento = AgendamentoComando(
             usuario=session.get('username', 'Admin'),
@@ -2701,6 +2720,7 @@ def api_envio_comando_por_local():
             comandos=json.dumps(config_options),
             matriculas=json.dumps(crachas),
             relogios=json.dumps(clock_ids),
+            observacao=observacao,
             status='Pendente'
         )
         db.add(novo_agendamento)

@@ -107,6 +107,7 @@ class AgendamentoComando(Base):
     resultado = Column(String(8000), nullable=True)
     sucesso_file = Column(String(500), nullable=True)
     falha_file = Column(String(500), nullable=True)
+    observacao = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 

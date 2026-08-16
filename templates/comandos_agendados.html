@@ -169,6 +169,9 @@
                                 <input type="checkbox" class="col-toggle-checkbox" value="locais" checked> Locais de Ponto
                             </label>
                             <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif; color: #1e293b;">
+                                <input type="checkbox" class="col-toggle-checkbox" value="observacao" checked> Observação
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif; color: #1e293b;">
                                 <input type="checkbox" class="col-toggle-checkbox" value="status" checked> Status
                             </label>
                             <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif; color: #1e293b;">
@@ -196,6 +199,7 @@
                             <th class="col-matriculas">Matrículas</th>
                             <th class="col-relogios">Relógios</th>
                             <th class="col-locais">Locais de Ponto</th>
+                            <th class="col-observacao">Observação</th>
                             <th class="col-status">Status</th>
                             <th class="col-resultado">Resultado/Log</th>
                             <th class="col-acoes">Ações</th>
@@ -221,7 +225,7 @@
 
     <script>
         const storageKeyAgendamentos = 'agendamentos_active_columns';
-        const defaultColumnsAgendamentos = ['id', 'data', 'usuario', 'comandos', 'matriculas', 'relogios', 'locais', 'status', 'resultado', 'acoes'];
+        const defaultColumnsAgendamentos = ['id', 'data', 'usuario', 'comandos', 'matriculas', 'relogios', 'locais', 'observacao', 'status', 'resultado', 'acoes'];
         let agendamentosCarregados = [];
 
         const loadAgendamentosActiveColumns = () => {
@@ -384,6 +388,7 @@
                         </td>
                         <td class="col-relogios">${item.qtd_relogios} relógios</td>
                         <td class="col-locais">${item.locais_ponto || '-'}</td>
+                        <td class="col-observacao"><small style="color: #4a5568;">${item.observacao || '-'}</small></td>
                         <td class="col-status"><span class="badge ${statusBadgeClass}">${item.status}</span></td>
                         <td class="col-resultado"><small style="color: #4a5568;">${item.resultado || '-'}</small></td>
                         <td class="col-acoes" style="white-space: nowrap; vertical-align: middle;">${acoesTd}</td>

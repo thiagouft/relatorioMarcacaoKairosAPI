@@ -357,26 +357,38 @@
 
                         groupDiv.appendChild(listDiv);
 
-                        // Container de botões (Enviar Agora + Agendar)
+                        // Container de botões (Enviar Agora + Observação + Agendar)
                         const btnWrapper = document.createElement('div');
                         btnWrapper.style.display = 'flex';
                         btnWrapper.style.gap = '10px';
                         btnWrapper.style.justifyContent = 'center';
+                        btnWrapper.style.alignItems = 'center';
                         btnWrapper.style.marginTop = '15px';
                         btnWrapper.style.flexWrap = 'wrap';
+
+                        // Campo de Observação por Local
+                        const obsInput = document.createElement('input');
+                        obsInput.type = 'text';
+                        obsInput.className = 'form-control obs-local-input';
+                        obsInput.placeholder = 'Observação (opcional)';
+                        obsInput.style.width = '220px';
+                        obsInput.style.height = '38px';
+                        obsInput.style.fontSize = '0.85rem';
 
                         // Botão Enviar Agora
                         const button = document.createElement('button');
                         button.textContent = '⚡ Enviar Comando Agora';
                         button.className = 'btn btn-primary';
-                        button.onclick = () => enviarComandoParaLocal(grupo, crachas, button);
-                        btnWrapper.appendChild(button);
+                        button.onclick = () => enviarComandoParaLocal(grupo, crachas, button, obsInput.value.trim());
 
                         // Botão Agendar Comando
                         const buttonAgendar = document.createElement('button');
                         buttonAgendar.textContent = '📅 Agendar Comando';
                         buttonAgendar.className = 'btn btn-warning';
-                        buttonAgendar.onclick = () => abrirModalAgendamentoLocal(grupo, crachas, groupDiv);
+                        buttonAgendar.onclick = () => abrirModalAgendamentoLocal(grupo, crachas, groupDiv, obsInput.value.trim());
+
+                        btnWrapper.appendChild(button);
+                        btnWrapper.appendChild(obsInput);
                         btnWrapper.appendChild(buttonAgendar);
 
                         groupDiv.appendChild(btnWrapper);
@@ -449,8 +461,8 @@
         // Modal agendamento por local
         let currentAgendamentoLocal = null;
 
-        function abrirModalAgendamentoLocal(grupo, crachas, groupDiv) {
-            currentAgendamentoLocal = { grupo, crachas, groupDiv };
+        function abrirModalAgendamentoLocal(grupo, crachas, groupDiv, observacao = "") {
+            currentAgendamentoLocal = { grupo, crachas, groupDiv, observacao };
             document.getElementById('tituloModalLocal').textContent = `📅 Agendar Comando: ${grupo}`;
             const inputDataHora = document.getElementById('dataHoraLocalModal');
             if (inputDataHora) {
@@ -485,7 +497,7 @@
                         return;
                     }
 
-                    const { grupo, crachas, groupDiv } = currentAgendamentoLocal;
+                    const { grupo, crachas, groupDiv, observacao } = currentAgendamentoLocal;
                     const resultDiv = groupDiv.querySelector('.command-result');
                     resultDiv.style.display = 'block';
                     resultDiv.innerHTML = 'Agendando...';
@@ -500,7 +512,8 @@
                             body: JSON.stringify({
                                 location: grupo,
                                 crachas: crachas,
-                                data_hora_execucao: dataHoraVal
+                                data_hora_execucao: dataHoraVal,
+                                observacao: observacao || ""
                             })
                         });
 
@@ -530,7 +543,7 @@
         });
 
         // Function to send command for a specific location
-        async function enviarComandoParaLocal(grupo, crachas, button) {
+        async function enviarComandoParaLocal(grupo, crachas, button, observacao = "") {
             const resultDiv = button.parentElement.nextElementSibling;
             resultDiv.style.display = 'block';
             resultDiv.innerHTML = 'Processando...';
@@ -541,7 +554,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         location: grupo,
-                        crachas: crachas
+                        crachas: crachas,
+                        observacao: observacao || ""
                     })
                 });
 
