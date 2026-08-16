@@ -62,6 +62,10 @@
                                 <strong style="color: #ff9800;">🏖️ Desbloqueio de Férias</strong>
                                 {% elif cmd.tipo == 'bloqueio_ferias' %}
                                 <strong style="color: var(--error-red);">🏖️ Bloqueio de Férias</strong>
+                                {% elif cmd.tipo == 'bloqueio_ferias_acesso' %}
+                                <strong style="color: #d32f2f;">🏖️ Bloquear férias acesso II</strong>
+                                {% elif cmd.tipo == 'desbloqueio_ferias_acesso' %}
+                                <strong style="color: #e65100;">🏖️ Desbloquear férias acesso II</strong>
                                 {% elif cmd.tipo == 'verificacao_conclusao' %}
                                 <strong style="color: #9c27b0;">🔍 Verificação de Conclusão de comando</strong>
                                 {% else %}
@@ -149,6 +153,8 @@
                         <option value="ponteiro">🔗 Reposição de Ponteiro (Todos os Relógios - Data D-1)</option>
                         <option value="desbloqueio_ferias">🏖️ Desbloqueio de Férias</option>
                         <option value="bloqueio_ferias">🏖️ Bloqueio de Férias</option>
+                        <option value="bloqueio_ferias_acesso">🏖️ Bloquear férias acesso II</option>
+                        <option value="desbloqueio_ferias_acesso">🏖️ Desbloquear férias acesso II</option>
                         <option value="verificacao_conclusao">🔍 Verificação de Conclusão de comando (Todos os Relógios)</option>
                     </select>
                 </div>

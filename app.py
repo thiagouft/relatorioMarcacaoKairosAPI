@@ -36,6 +36,7 @@ from utils_envio_comando import (
     generate_cabecalho_arquivo
 )
 from automacao_relogio import run_relogio_automation
+from automacao_acesso import generate_acesso_csv, run_acesso_import
 app = Flask(__name__)
 app.config.from_object(Config)
 
@@ -130,6 +131,8 @@ def enviar_email_log(recorrente_id, tipo, data_hora_str, log_filepath, destinata
         'ponteiro': 'Reposição de Ponteiro',
         'desbloqueio_ferias': 'Desbloqueio de Férias',
         'bloqueio_ferias': 'Bloqueio de Férias',
+        'bloqueio_ferias_acesso': 'Bloquear férias acesso II',
+        'desbloqueio_ferias_acesso': 'Desbloquear férias acesso II',
         'verificacao_conclusao': 'Verificação de Conclusão de comando'
     }
     tipo_bonito = tipos_nome.get(tipo, tipo)
@@ -2090,6 +2093,82 @@ def process_scheduled_commands_worker():
                                                         f_log.write(f" -> Criado agendamento de bloqueio imediato #{novo_agendamento.id} para todos os relógios.\n")
                                                         f_log.write("Processamento de bloqueio concluído com sucesso.\n")
                                                         f_log.flush()
+                                        elif command.tipo == 'bloqueio_ferias_acesso':
+                                            f_log.write("Iniciando rotina de Bloquear Férias no Acesso II...\n")
+                                            f_log.flush()
+                                            
+                                            # 1. Obter data de início das férias desejada (hoje)
+                                            hoje = now.date()
+                                            dt_ini_start = datetime.datetime(hoje.year, hoje.month, hoje.day, 0, 0, 0)
+                                            dt_ini_end = datetime.datetime(hoje.year, hoje.month, hoje.day, 23, 59, 59)
+                                            
+                                            f_log.write(f"Filtrando pessoas com Início das Férias em: {hoje.strftime('%d/%m/%Y')}\n")
+                                            f_log.flush()
+                                            
+                                            # 2. Consultar pessoas
+                                            pessoas = db.query(Pessoa).filter(
+                                                Pessoa.data_inicio_ferias != None,
+                                                Pessoa.data_inicio_ferias >= dt_ini_start,
+                                                Pessoa.data_inicio_ferias <= dt_ini_end
+                                            ).all()
+                                            
+                                            if not pessoas:
+                                                f_log.write("Nenhuma pessoa encontrada com início das férias na data atual.\n")
+                                                f_log.flush()
+                                            else:
+                                                f_log.write(f"Encontrados {len(pessoas)} colaboradores para bloqueio no Acesso II:\n")
+                                                for p in pessoas:
+                                                    f_log.write(f" - Chapa: {p.chapa} | Nome: {p.nome}\n")
+                                                f_log.write("\n")
+                                                f_log.flush()
+                                                
+                                                # 3. Gerar arquivo CSV (Person Situation = 11, Observation = 'Férias')
+                                                csv_path = generate_acesso_csv(pessoas, person_situation=11, observation='Férias')
+                                                f_log.write(f"Arquivo CSV gerado em: {csv_path}\n")
+                                                f_log.flush()
+                                                
+                                                # 4. Executar automação Playwright no sistema Acesso II
+                                                for line in run_acesso_import(csv_path):
+                                                    f_log.write(line)
+                                                    f_log.flush()
+                                        elif command.tipo == 'desbloqueio_ferias_acesso':
+                                            f_log.write("Iniciando rotina de Desbloquear Férias no Acesso II...\n")
+                                            f_log.flush()
+                                            
+                                            # 1. Obter ontem (D-1)
+                                            ontem = now.date() - datetime.timedelta(days=1)
+                                            dt_fim_start = datetime.datetime(ontem.year, ontem.month, ontem.day, 0, 0, 0)
+                                            dt_fim_end = datetime.datetime(ontem.year, ontem.month, ontem.day, 23, 59, 59)
+                                            
+                                            f_log.write(f"Filtrando pessoas com Fim das Férias em: {ontem.strftime('%d/%m/%Y')}\n")
+                                            f_log.flush()
+                                            
+                                            # 2. Consultar pessoas
+                                            pessoas = db.query(Pessoa).filter(
+                                                Pessoa.data_fim_ferias != None,
+                                                Pessoa.data_fim_ferias >= dt_fim_start,
+                                                Pessoa.data_fim_ferias <= dt_fim_end
+                                            ).all()
+                                            
+                                            if not pessoas:
+                                                f_log.write("Nenhuma pessoa encontrada com fim das férias na data filtrada.\n")
+                                                f_log.flush()
+                                            else:
+                                                f_log.write(f"Encontrados {len(pessoas)} colaboradores para desbloqueio no Acesso II:\n")
+                                                for p in pessoas:
+                                                    f_log.write(f" - Chapa: {p.chapa} | Nome: {p.nome}\n")
+                                                f_log.write("\n")
+                                                f_log.flush()
+                                                
+                                                # 3. Gerar arquivo CSV (Person Situation = 10, Observation = '')
+                                                csv_path = generate_acesso_csv(pessoas, person_situation=10, observation='')
+                                                f_log.write(f"Arquivo CSV gerado em: {csv_path}\n")
+                                                f_log.flush()
+                                                
+                                                # 4. Executar automação Playwright no sistema Acesso II
+                                                for line in run_acesso_import(csv_path):
+                                                    f_log.write(line)
+                                                    f_log.flush()
                                         
                                         f_log.write(f"\n--- FIM DA EXECUÇÃO EM {get_local_now().strftime('%d/%m/%Y %H:%M:%S')} ---\n")
                                     
