@@ -2323,7 +2323,43 @@ def api_agendamento_comandos_criar_por_local():
 def api_agendamento_comandos_listar():
     db = get_db_session()
     try:
-        agendamentos = db.query(AgendamentoComando).order_by(AgendamentoComando.data_hora_execucao.desc()).all()
+        matricula = request.args.get('matricula', '').strip()
+        start_date = request.args.get('start_date', '').strip()
+        end_date = request.args.get('end_date', '').strip()
+        observacao = request.args.get('observacao', '').strip()
+        limit_param = request.args.get('limit', '').strip()
+
+        query = db.query(AgendamentoComando)
+        has_filter = bool(matricula or start_date or end_date or observacao)
+
+        if start_date:
+            try:
+                dt_start = datetime.datetime.strptime(start_date, '%Y-%m-%d')
+                query = query.filter(AgendamentoComando.data_hora_execucao >= dt_start)
+            except ValueError:
+                pass
+
+        if end_date:
+            try:
+                dt_end = datetime.datetime.strptime(end_date, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+                query = query.filter(AgendamentoComando.data_hora_execucao <= dt_end)
+            except ValueError:
+                pass
+
+        if observacao:
+            query = query.filter(AgendamentoComando.observacao.ilike(f"%{observacao}%"))
+
+        if matricula:
+            query = query.filter(AgendamentoComando.matriculas.ilike(f"%{matricula}%"))
+
+        query = query.order_by(AgendamentoComando.data_hora_execucao.desc(), AgendamentoComando.id.desc())
+
+        if limit_param.isdigit():
+            query = query.limit(int(limit_param))
+        elif not has_filter:
+            query = query.limit(40)
+
+        agendamentos = query.all()
         lista = []
         for a in agendamentos:
             try:
@@ -2737,6 +2773,120 @@ def api_envio_comando_por_local():
     except Exception as e:
         print(f"Erro no processamento por local: {e}")
         return jsonify({'sucesso': False, 'mensagem': f'Erro ao processar: {str(e)}'}), 500
+
+@app.route('/api/envio_comando_todos_locais', methods=['POST'])
+@permission_required('envio_comando')
+def api_envio_comando_todos_locais():
+    try:
+        data = request.json
+        grupos = data.get('grupos', {})
+        observacao_val = data.get('observacao', '').strip() if data.get('observacao') else None
+        observacao = observacao_val if observacao_val else None
+
+        if not grupos or not isinstance(grupos, dict):
+            return jsonify({'sucesso': False, 'mensagem': 'Nenhum grupo de locais fornecido.'}), 400
+
+        config_options = {
+            'EnviarListaCredenciais': True,
+            'EnviarListaTemplate': True
+        }
+
+        db = get_db_session()
+        agendamentos_criados = []
+
+        for grupo_nome, crachas in grupos.items():
+            if not crachas:
+                continue
+            clock_ids = CLOCK_GROUPS.get(grupo_nome, [])
+            if not clock_ids:
+                continue
+
+            novo_agendamento = AgendamentoComando(
+                usuario=session.get('username', 'Admin'),
+                data_hora_execucao=get_local_now().replace(tzinfo=None),
+                comandos=json.dumps(config_options),
+                matriculas=json.dumps(crachas),
+                relogios=json.dumps(clock_ids),
+                observacao=observacao,
+                status='Pendente'
+            )
+            db.add(novo_agendamento)
+            db.commit()
+            agendamentos_criados.append(novo_agendamento.id)
+            log_action(f"Criou agendamento imediato #{novo_agendamento.id} de comandos por local {grupo_nome}")
+
+        db.close()
+
+        if not agendamentos_criados:
+            return jsonify({'sucesso': False, 'mensagem': 'Nenhum agendamento gerado (locais sem relógios ou crachás válidos).'}), 400
+
+        return jsonify({
+            'sucesso': True,
+            'mensagem': f'Comandos agendados na fila de execução imediata para todos os {len(agendamentos_criados)} locais com sucesso.'
+        })
+
+    except Exception as e:
+        print(f"Erro no processamento de todos os locais: {e}")
+        return jsonify({'sucesso': False, 'mensagem': f'Erro ao processar: {str(e)}'}), 500
+
+@app.route('/api/agendamento_comandos/criar_todos_locais', methods=['POST'])
+@permission_required('envio_comando')
+def api_agendamento_comandos_criar_todos_locais():
+    try:
+        data = request.json
+        grupos = data.get('grupos', {})
+        data_hora_str = data.get('data_hora_execucao')
+        observacao_val = data.get('observacao', '').strip() if data.get('observacao') else None
+        observacao = observacao_val if observacao_val else None
+
+        if not grupos or not isinstance(grupos, dict):
+            return jsonify({'sucesso': False, 'mensagem': 'Nenhum grupo de locais fornecido.'}), 400
+
+        if not data_hora_str:
+            return jsonify({'sucesso': False, 'mensagem': 'Data e hora são obrigatórias.'}), 400
+
+        try:
+            dt_exec = datetime.datetime.fromisoformat(data_hora_str)
+        except ValueError:
+            return jsonify({'sucesso': False, 'mensagem': 'Formato de data e hora inválido.'}), 400
+
+        comandos_dict = {
+            'EnviarListaCredenciais': True,
+            'EnviarListaTemplate': True
+        }
+
+        db = get_db_session()
+        agendamentos_criados = []
+
+        for grupo_nome, crachas in grupos.items():
+            if not crachas:
+                continue
+            clock_ids = CLOCK_GROUPS.get(grupo_nome, [])
+            if not clock_ids:
+                continue
+
+            novo_agendamento = AgendamentoComando(
+                usuario=session.get('username', 'Admin'),
+                data_hora_execucao=dt_exec,
+                comandos=json.dumps(comandos_dict),
+                matriculas=json.dumps(crachas),
+                relogios=json.dumps(clock_ids),
+                observacao=observacao,
+                status='Pendente'
+            )
+            db.add(novo_agendamento)
+            db.commit()
+            agendamentos_criados.append(novo_agendamento.id)
+            log_action(f"Criou agendamento #{novo_agendamento.id} de comandos para local {grupo_nome}")
+
+        db.close()
+
+        if not agendamentos_criados:
+            return jsonify({'sucesso': False, 'mensagem': 'Nenhum agendamento registrado (locais sem relógios ou crachás válidos).'}), 400
+
+        return jsonify({'sucesso': True, 'mensagem': f'Agendamentos registrados com sucesso para todos os {len(agendamentos_criados)} locais.'})
+    except Exception as e:
+        return jsonify({'sucesso': False, 'mensagem': f'Erro ao salvar agendamentos: {str(e)}'}), 500
 
 @app.route('/api/export', methods=['POST'])
 @login_required

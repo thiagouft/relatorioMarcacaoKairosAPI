@@ -18,6 +18,7 @@
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
             border: 1px solid #e2e8f0;
             width: 100%;
+            box-sizing: border-box;
         }
 
         .agendamentos-table-container {
@@ -124,10 +125,43 @@
     {% set active_page = 'comandos_agendados' %}
     {% include 'navbar.html' %}
 
-    <div class="container" style="flex-direction: column; gap: 1.5rem; padding-top: 1.5rem; padding-bottom: 2.5rem;">
+    <div class="container" style="display: flex; flex-direction: column; gap: 1.5rem; padding-top: 1.5rem; padding-bottom: 2.5rem;">
 
         <!-- Alert messages -->
         <div id="alertContainer"></div>
+
+        <!-- Painel de Filtros de Pesquisa -->
+        <div class="card" style="background-color: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); border: 1px solid #e2e8f0; margin-bottom: 0.5rem; box-sizing: border-box; width: 100%;">
+            <h3 style="margin-top: 0; margin-bottom: 1rem; font-size: 1.1rem; color: #2d3748; display: flex; align-items: center; gap: 8px;">
+                🔍 Filtrar Comandos Agendados
+            </h3>
+            <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
+                <div style="flex: 1; min-width: 180px;">
+                    <label for="filter_matricula" style="display: block; font-weight: 600; margin-bottom: 0.4rem; font-size: 0.85rem; color: #4a5568;">Matrícula</label>
+                    <input type="text" id="filter_matricula" class="form-control filter-input" placeholder="Ex: 30019002090" style="width: 100%; height: 38px; padding: 0.4rem 0.75rem; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 0.9rem;" />
+                </div>
+                <div style="flex: 1; min-width: 140px;">
+                    <label for="filter_start_date" style="display: block; font-weight: 600; margin-bottom: 0.4rem; font-size: 0.85rem; color: #4a5568;">Data Início</label>
+                    <input type="date" id="filter_start_date" class="form-control filter-input" style="width: 100%; height: 38px; padding: 0.4rem 0.75rem; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 0.9rem;" />
+                </div>
+                <div style="flex: 1; min-width: 140px;">
+                    <label for="filter_end_date" style="display: block; font-weight: 600; margin-bottom: 0.4rem; font-size: 0.85rem; color: #4a5568;">Data Fim</label>
+                    <input type="date" id="filter_end_date" class="form-control filter-input" style="width: 100%; height: 38px; padding: 0.4rem 0.75rem; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 0.9rem;" />
+                </div>
+                <div style="flex: 1.5; min-width: 200px;">
+                    <label for="filter_observacao" style="display: block; font-weight: 600; margin-bottom: 0.4rem; font-size: 0.85rem; color: #4a5568;">Observação</label>
+                    <input type="text" id="filter_observacao" class="form-control filter-input" placeholder="Texto na observação..." style="width: 100%; height: 38px; padding: 0.4rem 0.75rem; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 0.9rem;" />
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button id="btnFiltrar" class="btn btn-primary" style="height: 38px; padding: 0 1.25rem; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; cursor: pointer;">
+                        🔍 Pesquisar
+                    </button>
+                    <button id="btnLimparFiltros" class="btn btn-secondary" style="height: 38px; padding: 0 1rem; font-weight: 600; background-color: #edf2f7; color: #4a5568; border: 1px solid #cbd5e0; border-radius: 6px; cursor: pointer;">
+                        Limpar
+                    </button>
+                </div>
+            </div>
+        </div>
 
         <div class="agendamentos-card">
             <div class="header-actions">
@@ -288,6 +322,29 @@
             
             document.getElementById('btnAtualizarLista').addEventListener('click', carregarAgendamentos);
             
+            const btnFiltrar = document.getElementById('btnFiltrar');
+            const btnLimpar = document.getElementById('btnLimparFiltros');
+            if (btnFiltrar) {
+                btnFiltrar.addEventListener('click', carregarAgendamentos);
+            }
+            if (btnLimpar) {
+                btnLimpar.addEventListener('click', () => {
+                    document.getElementById('filter_matricula').value = '';
+                    document.getElementById('filter_start_date').value = '';
+                    document.getElementById('filter_end_date').value = '';
+                    document.getElementById('filter_observacao').value = '';
+                    carregarAgendamentos();
+                });
+            }
+
+            document.querySelectorAll('.filter-input').forEach(input => {
+                input.addEventListener('keyup', (e) => {
+                    if (e.key === 'Enter') {
+                        carregarAgendamentos();
+                    }
+                });
+            });
+
             // Auto-refresh a cada 30 segundos
             setInterval(carregarAgendamentos, 30000);
 
@@ -336,7 +393,19 @@
         async function carregarAgendamentos() {
             const tbody = document.getElementById('tabelaAgendamentos');
             try {
-                const response = await fetch('/api/agendamento_comandos/listar');
+                const params = new URLSearchParams();
+                const matricula = document.getElementById('filter_matricula')?.value.trim();
+                const startDate = document.getElementById('filter_start_date')?.value;
+                const endDate = document.getElementById('filter_end_date')?.value;
+                const observacao = document.getElementById('filter_observacao')?.value.trim();
+
+                if (matricula) params.append('matricula', matricula);
+                if (startDate) params.append('start_date', startDate);
+                if (endDate) params.append('end_date', endDate);
+                if (observacao) params.append('observacao', observacao);
+
+                const url = `/api/agendamento_comandos/listar` + (params.toString() ? `?${params.toString()}` : '');
+                const response = await fetch(url);
                 const data = await response.json();
                 
                 agendamentosCarregados = data.agendamentos || [];

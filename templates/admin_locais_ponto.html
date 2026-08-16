@@ -330,9 +330,87 @@
             }
         });
 
+        let ultimosResultadosLocais = null;
+
         function renderResults(data) {
             const container = document.getElementById('results-container');
             container.innerHTML = '';
+            ultimosResultadosLocais = data.grupo_crachas || {};
+
+            // 0. Painel Geral de Ações para Todos os Locais
+            let temLocaisValidos = false;
+            if (data.grupo_crachas && Object.keys(data.grupo_crachas).length > 0) {
+                for (const [g, cList] of Object.entries(data.grupo_crachas)) {
+                    if (cList && cList.length > 0) {
+                        temLocaisValidos = true;
+                        break;
+                    }
+                }
+            }
+
+            if (temLocaisValidos) {
+                const generalCard = document.createElement('div');
+                generalCard.className = 'result-group';
+                generalCard.style.backgroundColor = '#eef2ff';
+                generalCard.style.border = '2px solid #6366f1';
+                generalCard.style.marginBottom = '25px';
+
+                const genTitle = document.createElement('h4');
+                genTitle.style.color = '#4338ca';
+                genTitle.style.borderBottomColor = '#6366f1';
+                genTitle.style.marginBottom = '10px';
+                genTitle.textContent = '⚡ Ações Gerais para Todos os Locais Listados';
+                generalCard.appendChild(genTitle);
+
+                const genDesc = document.createElement('p');
+                genDesc.style.fontSize = '0.85rem';
+                genDesc.style.color = '#475569';
+                genDesc.style.marginBottom = '15px';
+                genDesc.textContent = 'Enviar ou agendar comandos de credenciais e biometrias para todos os locais abaixo com suas respectivas matrículas:';
+                generalCard.appendChild(genDesc);
+
+                const genBtnWrapper = document.createElement('div');
+                genBtnWrapper.style.display = 'flex';
+                genBtnWrapper.style.gap = '10px';
+                genBtnWrapper.style.justifyContent = 'center';
+                genBtnWrapper.style.alignItems = 'center';
+                genBtnWrapper.style.flexWrap = 'wrap';
+
+                const btnEnviarTodos = document.createElement('button');
+                btnEnviarTodos.className = 'btn btn-primary';
+                btnEnviarTodos.style.backgroundColor = '#4f46e5';
+                btnEnviarTodos.style.borderColor = '#4f46e5';
+                btnEnviarTodos.textContent = '⚡ Enviar Comando Agora (Todos os Locais)';
+                btnEnviarTodos.onclick = () => enviarComandoParaTodosLocais(btnEnviarTodos);
+
+                const obsGeralInput = document.createElement('input');
+                obsGeralInput.type = 'text';
+                obsGeralInput.id = 'obsGeralLocais';
+                obsGeralInput.className = 'form-control';
+                obsGeralInput.placeholder = 'Observação Geral (opcional)';
+                obsGeralInput.style.width = '240px';
+                obsGeralInput.style.height = '38px';
+                obsGeralInput.style.fontSize = '0.85rem';
+
+                const btnAgendarTodos = document.createElement('button');
+                btnAgendarTodos.className = 'btn btn-warning';
+                btnAgendarTodos.textContent = '📅 Agendar Comando (Todos os Locais)';
+                btnAgendarTodos.onclick = () => abrirModalAgendamentoTodosLocais();
+
+                genBtnWrapper.appendChild(btnEnviarTodos);
+                genBtnWrapper.appendChild(obsGeralInput);
+                genBtnWrapper.appendChild(btnAgendarTodos);
+                generalCard.appendChild(genBtnWrapper);
+
+                const resultGeralDiv = document.createElement('div');
+                resultGeralDiv.id = 'resultGeralLocais';
+                resultGeralDiv.className = 'command-result';
+                resultGeralDiv.style.marginTop = '15px';
+                resultGeralDiv.style.display = 'none';
+                generalCard.appendChild(resultGeralDiv);
+
+                container.appendChild(generalCard);
+            }
 
             // 1. Locais com crachás (Grupos normais)
             if (data.grupo_crachas && Object.keys(data.grupo_crachas).length > 0) {
@@ -462,8 +540,19 @@
         let currentAgendamentoLocal = null;
 
         function abrirModalAgendamentoLocal(grupo, crachas, groupDiv, observacao = "") {
-            currentAgendamentoLocal = { grupo, crachas, groupDiv, observacao };
+            currentAgendamentoLocal = { isTodos: false, grupo, crachas, groupDiv, observacao };
             document.getElementById('tituloModalLocal').textContent = `📅 Agendar Comando: ${grupo}`;
+            const inputDataHora = document.getElementById('dataHoraLocalModal');
+            if (inputDataHora) {
+                inputDataHora.value = getFormatDataHoraAtualIso();
+            }
+            document.getElementById('modalAgendamentoLocal').style.display = 'flex';
+        }
+
+        function abrirModalAgendamentoTodosLocais() {
+            const obsGeral = document.getElementById('obsGeralLocais') ? document.getElementById('obsGeralLocais').value.trim() : "";
+            currentAgendamentoLocal = { isTodos: true, observacao: obsGeral };
+            document.getElementById('tituloModalLocal').textContent = `📅 Agendar Comando: Todos os Locais`;
             const inputDataHora = document.getElementById('dataHoraLocalModal');
             if (inputDataHora) {
                 inputDataHora.value = getFormatDataHoraAtualIso();
@@ -497,43 +586,54 @@
                         return;
                     }
 
-                    const { grupo, crachas, groupDiv, observacao } = currentAgendamentoLocal;
-                    const resultDiv = groupDiv.querySelector('.command-result');
-                    resultDiv.style.display = 'block';
-                    resultDiv.innerHTML = 'Agendando...';
+                    const isTodos = currentAgendamentoLocal.isTodos;
+                    const resultDiv = isTodos ? document.getElementById('resultGeralLocais') : currentAgendamentoLocal.groupDiv.querySelector('.command-result');
+                    if (resultDiv) {
+                        resultDiv.style.display = 'block';
+                        resultDiv.innerHTML = 'Agendando...';
+                    }
 
                     btnConfirmar.disabled = true;
                     btnConfirmar.textContent = 'Salvando...';
 
                     try {
-                        const response = await fetch('/api/agendamento_comandos/criar_por_local', {
+                        const url = isTodos ? '/api/agendamento_comandos/criar_todos_locais' : '/api/agendamento_comandos/criar_por_local';
+                        const bodyData = isTodos ? {
+                            grupos: ultimosResultadosLocais,
+                            data_hora_execucao: dataHoraVal,
+                            observacao: currentAgendamentoLocal.observacao || ""
+                        } : {
+                            location: currentAgendamentoLocal.grupo,
+                            crachas: currentAgendamentoLocal.crachas,
+                            data_hora_execucao: dataHoraVal,
+                            observacao: currentAgendamentoLocal.observacao || ""
+                        };
+
+                        const response = await fetch(url, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                location: grupo,
-                                crachas: crachas,
-                                data_hora_execucao: dataHoraVal,
-                                observacao: observacao || ""
-                            })
+                            body: JSON.stringify(bodyData)
                         });
 
                         const res = await response.json();
                         document.getElementById('modalAgendamentoLocal').style.display = 'none';
 
-                        if (res.sucesso) {
-                            resultDiv.innerHTML = `
-                                <p class="success" style="color: #276749; background-color: #c6f6d5; padding: 0.75rem; border-radius: 6px;">
-                                    ✅ ${res.mensagem} <br>
-                                    <a href="/comandos_agendados" style="color: #2b6cb0; font-weight: 600; text-decoration: underline;">👉 Ver Comandos Agendados</a>
-                                </p>
-                            `;
-                            showToast(`Agendamento registrado com sucesso para o local ${grupo}!`, 'success');
-                        } else {
-                            resultDiv.innerHTML = `<p class="error">${res.mensagem}</p>`;
+                        if (resultDiv) {
+                            if (res.sucesso) {
+                                resultDiv.innerHTML = `
+                                    <p class="success" style="color: #276749; background-color: #c6f6d5; padding: 0.75rem; border-radius: 6px;">
+                                        ✅ ${res.mensagem} <br>
+                                        <a href="/comandos_agendados" style="color: #2b6cb0; font-weight: 600; text-decoration: underline;">👉 Ver Comandos Agendados</a>
+                                    </p>
+                                `;
+                                showToast(res.mensagem, 'success');
+                            } else {
+                                resultDiv.innerHTML = `<p class="error">${res.mensagem}</p>`;
+                            }
                         }
                     } catch (err) {
                         document.getElementById('modalAgendamentoLocal').style.display = 'none';
-                        resultDiv.innerHTML = `<p class="error">Erro ao agendar: ${err.message}</p>`;
+                        if (resultDiv) resultDiv.innerHTML = `<p class="error">Erro ao agendar: ${err.message}</p>`;
                     } finally {
                         btnConfirmar.disabled = false;
                         btnConfirmar.textContent = 'Confirmar Agendamento';
@@ -578,6 +678,48 @@
                 }
             } catch (error) {
                 resultDiv.innerHTML = `<p class="error">Erro: ${error.message}</p>`;
+            }
+        }
+
+        // Function to send command for ALL locations at once
+        async function enviarComandoParaTodosLocais(button) {
+            const resultDiv = document.getElementById('resultGeralLocais');
+            const obsGeral = document.getElementById('obsGeralLocais') ? document.getElementById('obsGeralLocais').value.trim() : "";
+            
+            if (resultDiv) {
+                resultDiv.style.display = 'block';
+                resultDiv.innerHTML = 'Processando comandos para todos os locais...';
+            }
+
+            try {
+                const response = await fetch('/api/envio_comando_todos_locais', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        grupos: ultimosResultadosLocais,
+                        observacao: obsGeral
+                    })
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.mensagem || 'Erro na requisição.');
+                }
+
+                if (result.sucesso && resultDiv) {
+                    resultDiv.innerHTML = `
+                        <p class="success" style="color: #276749; background-color: #c6f6d5; padding: 0.75rem; border-radius: 6px;">
+                            ✅ ${result.mensagem} <br>
+                            <a href="/comandos_agendados" style="color: #2b6cb0; font-weight: 600; text-decoration: underline;">👉 Ver Comandos Agendados</a>
+                        </p>
+                    `;
+                    showToast(result.mensagem, 'success');
+                } else if (resultDiv) {
+                    resultDiv.innerHTML = `<p class="error">${result.mensagem}</p>`;
+                }
+            } catch (error) {
+                if (resultDiv) resultDiv.innerHTML = `<p class="error">Erro: ${error.message}</p>`;
             }
         }
 
