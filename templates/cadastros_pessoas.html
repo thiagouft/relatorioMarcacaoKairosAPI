@@ -21,11 +21,17 @@
         {% endwith %}
 
         <div class="card">
-            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
                 <h2 style="color: var(--primary-blue); margin: 0;">Cadastro de Pessoas</h2>
-                <div style="display: flex; gap: 10px;">
-                    <a href="{{ url_for('cadastros_importar') }}" class="btn btn-success" style="width: auto;">Importar Efetivo (.xls)</a>
-                    <a href="{{ url_for('cadastros_importar_ferias') }}" class="btn btn-primary" style="width: auto; background-color: #17a2b8; border-color: #17a2b8; color: #fff;">Importar Férias (.xlsx)</a>
+                <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
+                    <div style="display: flex; gap: 10px;">
+                        <a href="{{ url_for('cadastros_importar') }}" class="btn btn-success" style="width: auto;">Importar Efetivo (.xls)</a>
+                        <a href="{{ url_for('cadastros_importar_ferias') }}" class="btn btn-primary" style="width: auto; background-color: #17a2b8; border-color: #17a2b8; color: #fff;">Importar Férias (.xlsx)</a>
+                    </div>
+                    <div style="font-size: 0.76rem; color: var(--text-gray, #6c757d); display: flex; gap: 12px; margin-top: 2px;">
+                        <span>Efetivo: <strong style="color: #495057;">{% if last_import_pessoas %}{{ last_import_pessoas }}{% else %}Nunca{% endif %}</strong></span>
+                        <span>Férias: <strong style="color: #495057;">{% if last_import_ferias %}{{ last_import_ferias }}{% else %}Nunca{% endif %}</strong></span>
+                    </div>
                 </div>
             </div>
 

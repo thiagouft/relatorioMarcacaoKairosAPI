@@ -11,7 +11,7 @@ import threading
 import time
 from functools import wraps
 from config import Config, get_local_now, fix_utf8_mojibake
-from db_setup import User, Log, Base, Horario, Secao, Gerencia, GerenciaSecao, Situacao, Pessoa, AgendamentoComando, ComandoRecorrente
+from db_setup import User, Log, Base, Horario, Secao, Gerencia, GerenciaSecao, Situacao, Pessoa, AgendamentoComando, ComandoRecorrente, Setting
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -3231,7 +3231,16 @@ def cadastros_pessoas():
     per_page = 20
     
     db = get_db_session()
+    last_import_pessoas = None
+    last_import_ferias = None
     try:
+        setting_p = db.query(Setting).filter_by(key='last_import_pessoas_datetime').first()
+        if setting_p:
+            last_import_pessoas = setting_p.value
+        setting_f = db.query(Setting).filter_by(key='last_import_ferias_datetime').first()
+        if setting_f:
+            last_import_ferias = setting_f.value
+
         query = db.query(Pessoa)
         if search:
             query = query.filter((Pessoa.chapa.like(f"%{search}%")) | (Pessoa.nome.like(f"%{search}%")))
@@ -3363,7 +3372,9 @@ def cadastros_pessoas():
             gerencias=gerencias,
             situacoes=situacoes,
             permissions=permissions,
-            is_admin=session.get('is_admin')
+            is_admin=session.get('is_admin'),
+            last_import_pessoas=last_import_pessoas,
+            last_import_ferias=last_import_ferias
         )
     finally:
         db.close()
@@ -3935,6 +3946,16 @@ def cadastros_importar():
                     created_count += 1
             
             db.commit()
+            
+            # Salva data/hora da última importação de efetivo
+            import_dt_str = get_local_now().strftime('%d/%m/%Y %H:%M')
+            setting_p = db.query(Setting).filter_by(key='last_import_pessoas_datetime').first()
+            if setting_p:
+                setting_p.value = import_dt_str
+            else:
+                db.add(Setting(key='last_import_pessoas_datetime', value=import_dt_str))
+            db.commit()
+
             log_action(f'Importou planilha de efetivo. Adicionados: {created_count}, Atualizados: {updated_count}')
             
             msg = f'Importação concluída com sucesso! {created_count} cadastros novos criados e {updated_count} cadastros atualizados.'
@@ -4087,6 +4108,16 @@ def cadastros_importar_ferias():
                     skipped_count += 1
 
             db.commit()
+            
+            # Salva data/hora da última importação de férias
+            import_dt_str = get_local_now().strftime('%d/%m/%Y %H:%M')
+            setting_f = db.query(Setting).filter_by(key='last_import_ferias_datetime').first()
+            if setting_f:
+                setting_f.value = import_dt_str
+            else:
+                db.add(Setting(key='last_import_ferias_datetime', value=import_dt_str))
+            db.commit()
+
             log_action(f'Importou planilha de férias. Atualizados: {updated_count}, Não encontrados: {skipped_count}')
             flash(f'Importação de férias concluída com sucesso! {updated_count} colaboradores tiveram suas férias atualizadas.', 'success')
             db.close()
