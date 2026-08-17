@@ -39,8 +39,8 @@ def generate_acesso_csv(pessoas, person_situation, observation, output_path=None
         row = f"{chapa_str};{nome_str};CONSÓRCIO PONTE RIO TOCANTINS;1;;{sit_str};0;16/06/2025;16/06/2099;4;;;;;;;;;;{obs_str};TRUE;;;false\n"
         lines.append(row)
 
-    # Gravação com encoding utf-8-sig (padrão UTF-8 com BOM aceito por sistemas Windows e web)
-    with open(output_path, 'w', encoding='utf-8-sig', errors='replace') as f:
+    # Gravação com encoding cp1252 (exigido pelo sistema DIMEP Acesso II para correta leitura do caractere Ó em CONSÓRCIO PONTE RIO TOCANTINS)
+    with open(output_path, 'w', encoding='cp1252', errors='replace') as f:
         f.writelines(lines)
 
     return output_path

@@ -20,7 +20,9 @@ env/
 *.log
 instance/
 
-# Relatórios e arquivos gerados pelo Envio de Comando
+# Relatórios e documentos gerados automaticamente
+static/documents/*
+!static/documents/.gitkeep
 static/falha_consulta.txt
 static/sucesso_inclusao.pdf
 static/sucesso_associacao.pdf
@@ -28,8 +30,9 @@ static/falhas_associacao.json
 static/sucesso_desligamento.pdf
 static/falha_desligamento.json
 
-#arquivos de relatório
+# Arquivos de dados e relatórios
 *.pdf
-
-#arquivos de textos
 *.txt
+*.csv
+*.json
+
