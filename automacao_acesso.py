@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from config import fix_utf8_mojibake
+
 CSV_HEADER = "Registration ID;Name;Org Structure  Function;Access Profile Code;PIS;Person Situation;Credential Number;Credential Start Date;Credential End Date;Technology;Credential User Face;Credential User REP;CPF;;;;;;;Observation;Inactive;;;CanReentry\n"
 
 def generate_acesso_csv(pessoas, person_situation, observation, output_path=None):
@@ -34,33 +36,15 @@ def generate_acesso_csv(pessoas, person_situation, observation, output_path=None
         sit_str = str(person_situation)
         obs_str = str(observation) if observation is not None else ''
         
-        # Monta a linha conforme o layout padrão do DIMEP Acesso II
-        # 0: Registration ID
-        # 1: Name
-        # 2: Org Structure  Function
-        # 3: Access Profile Code
-        # 4: PIS
-        # 5: Person Situation
-        # 6: Credential Number
-        # 7: Credential Start Date
-        # 8: Credential End Date
-        # 9: Technology
-        # 10: Credential User Face
-        # 11: Credential User REP
-        # 12: CPF
-        # 13-18: vazios
-        # 19: Observation
-        # 20: Inactive
-        # 21-22: vazios
-        # 23: CanReentry
         row = f"{chapa_str};{nome_str};CONSÓRCIO PONTE RIO TOCANTINS;1;;{sit_str};0;16/06/2025;16/06/2099;4;;;;;;;;;;{obs_str};TRUE;;;false\n"
         lines.append(row)
 
-    # Gravação com encoding cp1252 (padrão aceito pelo sistema DIMEP Acesso)
-    with open(output_path, 'w', encoding='cp1252', errors='replace') as f:
+    # Gravação com encoding utf-8-sig (padrão UTF-8 com BOM aceito por sistemas Windows e web)
+    with open(output_path, 'w', encoding='utf-8-sig', errors='replace') as f:
         f.writelines(lines)
 
     return output_path
+
 
 
 def run_acesso_import(csv_path, output_dir=None):
@@ -159,12 +143,21 @@ def run_acesso_import(csv_path, output_dir=None):
         # Ler resumo do relatório baixado se for texto
         if os.path.exists(saved_report_path):
             try:
-                with open(saved_report_path, 'r', encoding='cp1252', errors='ignore') as rf:
-                    conteudo = rf.read()
-                    if conteudo:
-                        yield f"\n📋 --- CONTEÚDO DO RELATÓRIO DO ACESSO II ---\n{conteudo.strip()}\n-----------------------------------------\n"
+                conteudo = ""
+                for enc in ('utf-8-sig', 'utf-8', 'cp1252', 'latin1'):
+                    try:
+                        with open(saved_report_path, 'r', encoding=enc) as rf:
+                            conteudo = rf.read()
+                            if conteudo:
+                                break
+                    except (UnicodeDecodeError, Exception):
+                        continue
+                if conteudo:
+                    conteudo_clean = fix_utf8_mojibake(conteudo)
+                    yield f"\n📋 --- CONTEÚDO DO RELATÓRIO DO ACESSO II ---\n{conteudo_clean.strip()}\n-----------------------------------------\n"
             except Exception:
                 pass
+
 
         yield "\n🏁 Automação no Acesso II concluída com sucesso!\n"
 

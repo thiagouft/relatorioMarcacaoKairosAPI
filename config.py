@@ -42,3 +42,24 @@ def get_local_now():
     except Exception:
         tz = datetime.timezone(datetime.timedelta(hours=Config.TIMEZONE_OFFSET))
         return datetime.datetime.now(tz)
+
+def fix_utf8_mojibake(text: str) -> str:
+    """
+    Corrige textos que sofreram codificação dupla UTF-8 (mojibake)
+    Exemplo: 'ImportaÃ§Ã£o' -> 'Importação', 'CONSÃ“RCIO' -> 'CONSÓRCIO', 'FÃ©rias' -> 'Férias'
+    """
+    if not text or not isinstance(text, str):
+        return text
+    
+    mojibake_indicators = ('Ã§', 'Ã£', 'Ã©', 'Ã“', 'Ã¡', 'Ã³', 'ÃŠ', 'Ãª', 'Ã¢', 'Ãµ', 'Ã\xa0', 'Ã\x87', 'Ã\x83', 'Ã\x81', 'Ã\x89', 'Ã\x8d', 'Ã\x93', 'Ã\x9a', 'Ãº', 'Ã\xba', 'Ã\xad')
+    
+    if any(m in text for m in mojibake_indicators):
+        try:
+            return text.encode('cp1252').decode('utf-8')
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            try:
+                return text.encode('latin1').decode('utf-8')
+            except (UnicodeEncodeError, UnicodeDecodeError):
+                pass
+    return text
+

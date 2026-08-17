@@ -10,7 +10,7 @@ import json
 import threading
 import time
 from functools import wraps
-from config import Config, get_local_now
+from config import Config, get_local_now, fix_utf8_mojibake
 from db_setup import User, Log, Base, Horario, Secao, Gerencia, GerenciaSecao, Situacao, Pessoa, AgendamentoComando, ComandoRecorrente
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, letter
@@ -641,6 +641,37 @@ def editar_emails_comando_recorrente(id):
         flash(f'Erro ao atualizar e-mails: {str(e)}', 'danger')
         
     return redirect(url_for('comandos_recorrentes'))
+
+@app.route('/admin/comandos_recorrentes/executar/<int:id>', methods=['POST'])
+@login_required
+@permission_required('envio_comando')
+def executar_comando_recorrente_imediato(id):
+    try:
+        db = get_db_session()
+        comando = db.query(ComandoRecorrente).get(id)
+        db.close()
+        
+        if not comando:
+            flash('Comando recorrente não encontrado.', 'danger')
+            return redirect(url_for('comandos_recorrentes'))
+            
+        user_name = session.get('username', 'Admin')
+        
+        # Dispara a execução do comando recorrente em thread em segundo plano
+        thread = threading.Thread(
+            target=execute_recurrent_command,
+            args=(id, f"{user_name} (Manual)"),
+            daemon=True
+        )
+        thread.start()
+        
+        log_action(f"Solicitou execução imediata do comando recorrente #{id} ({comando.tipo})")
+        flash(f'Execução imediata do comando recorrente #{id} foi iniciada em segundo plano! O log será atualizado assim que for concluído.', 'success')
+    except Exception as e:
+        flash(f'Erro ao solicitar execução do comando recorrente: {str(e)}', 'danger')
+        
+    return redirect(url_for('comandos_recorrentes'))
+
 
 @app.route('/hora_extra_acumulada')
 @permission_required('hora_extra_acumulada')
@@ -1746,6 +1777,419 @@ def api_envio_comando_processar():
 
 # --- Agendamento de Comandos API e Worker ---
 
+def execute_recurrent_command(command_id, executed_by_user="Sistema (Recorrente)"):
+    """
+    Executa a lógica de um comando recorrente (manualmente ou via worker agendado).
+    """
+    db = get_db_session()
+    log_filepath = None
+    log_filename = None
+    try:
+        command = db.query(ComandoRecorrente).get(command_id)
+        if not command:
+            print(f"[AGENDAMENTO WORKER] Comando recorrente #{command_id} não encontrado.")
+            return False
+
+        now = get_local_now()
+        now_naive = now.replace(tzinfo=None)
+
+        command.ultimo_disparo = now_naive
+        db.commit()
+
+        log_filename = f"documents/log_recorrente_{command.id}.txt"
+        log_filepath = os.path.join(app.root_path, 'static', log_filename)
+        os.makedirs(os.path.dirname(log_filepath), exist_ok=True)
+
+        with open(log_filepath, 'w', encoding='utf-8') as f_log:
+            f_log.write(f"--- LOG DE EXECUÇÃO RECORRENTE #{command.id} ---\n")
+            f_log.write(f"Tipo: {command.tipo}\n")
+            f_log.write(f"Executado por: {executed_by_user}\n")
+            f_log.write(f"Data/Hora de Início: {now.strftime('%d/%m/%Y %H:%M:%S')}\n\n")
+            f_log.flush()
+
+            if command.tipo == 'datahora':
+                for line in run_relogio_automation('datahora', relogio_ids=None):
+                    f_log.write(fix_utf8_mojibake(line))
+                    f_log.flush()
+            elif command.tipo == 'ponteiro':
+                yesterday = now - datetime.timedelta(days=1)
+                yesterday_str = yesterday.strftime('%d/%m/%Y')
+                for line in run_relogio_automation('ponteiro', data_personalizada=yesterday_str, relogio_ids=None):
+                    f_log.write(fix_utf8_mojibake(line))
+                    f_log.flush()
+            elif command.tipo == 'verificacao_conclusao':
+                for line in run_relogio_automation('verificacao_conclusao', relogio_ids=None):
+                    f_log.write(fix_utf8_mojibake(line))
+                    f_log.flush()
+            elif command.tipo == 'desbloqueio_ferias':
+                f_log.write("Iniciando rotina de Desbloqueio de Férias...\n")
+                f_log.flush()
+                
+                # 1. Obter ontem (D-1)
+                ontem = now.date() - datetime.timedelta(days=1)
+                dt_fim_start = datetime.datetime(ontem.year, ontem.month, ontem.day, 0, 0, 0)
+                dt_fim_end = datetime.datetime(ontem.year, ontem.month, ontem.day, 23, 59, 59)
+                
+                f_log.write(f"Filtrando pessoas com Fim das Férias em: {ontem.strftime('%d/%m/%Y')}\n")
+                f_log.flush()
+                
+                # 2. Consultar pessoas
+                pessoas = db.query(Pessoa).filter(
+                    Pessoa.data_fim_ferias != None,
+                    Pessoa.data_fim_ferias >= dt_fim_start,
+                    Pessoa.data_fim_ferias <= dt_fim_end
+                ).all()
+                
+                if not pessoas:
+                    f_log.write("Nenhuma pessoa encontrada com fim das férias na data filtrada.\n")
+                    f_log.flush()
+                else:
+                    matriculas = [p.chapa for p in pessoas if p.chapa]
+                    f_log.write(f"Encontrados {len(pessoas)} colaboradores:\n")
+                    for p in pessoas:
+                        f_log.write(f" - Chapa: {p.chapa} | Nome: {p.nome}\n")
+                    f_log.write("\n")
+                    f_log.flush()
+                    
+                    # 3. Calcular período de apuração de 2 meses
+                    def subtrair_meses_local(dt, meses):
+                        import calendar
+                        m = dt.month - meses
+                        y = dt.year
+                        while m <= 0:
+                            m += 12
+                            y -= 1
+                        _, last_d = calendar.monthrange(y, m)
+                        d = min(dt.day, last_d)
+                        return datetime.date(y, m, d)
+                    
+                    start_date_obj = subtrair_meses_local(now.date(), 2)
+                    end_date_obj = now.date()
+                    
+                    start_date_str = start_date_obj.strftime('%d-%m-%Y')
+                    end_date_str = end_date_obj.strftime('%d-%m-%Y')
+                    
+                    f_log.write(f"Período de apuração dos locais de ponto: {start_date_obj.strftime('%d/%m/%Y')} a {end_date_obj.strftime('%d/%m/%Y')}\n")
+                    f_log.write("Consultando API do Kairos...\n\n")
+                    f_log.flush()
+                    
+                    grupo_crachas = {grupo: set() for grupo in CLOCK_GROUPS}
+                    crachas_sem_dados = []
+                    crachas_inexistentes = []
+                    
+                    # 4. Consultar locais de ponto para cada colaborador
+                    for p in pessoas:
+                        cracha = p.chapa
+                        f_log.write(f"Consultando chapa {cracha} ({p.nome})... ")
+                        f_log.flush()
+                        
+                        payload = {
+                            "CrachasPessoa": [cracha],
+                            "DataInicio": start_date_str,
+                            "DataFim": end_date_str,
+                            "CalculoNaoAtualizado": "true",
+                            "ResponseType": "AS400V1"
+                        }
+                        
+                        try:
+                            response = requests.post(
+                                app.config['KAIROS_API_URL'],
+                                json=payload,
+                                headers=app.config['KAIROS_HEADERS'],
+                                timeout=TIMEOUT
+                            )
+                            
+                            if response.status_code == 200:
+                                resp_json = response.json()
+                                sucesso = resp_json.get("Sucesso")
+                                obj_list = resp_json.get("Obj")
+                                
+                                if sucesso and isinstance(obj_list, list) and len(obj_list) > 0:
+                                    relogio_ids = set()
+                                    for item in obj_list:
+                                        relogio_id = item.get("RelogioID")
+                                        if relogio_id is not None:
+                                            relogio_ids.add(relogio_id)
+                                            
+                                    grupos_encontrados = []
+                                    for grupo, ids_grupo in CLOCK_GROUPS.items():
+                                        if any(relogio_id in ids_grupo for relogio_id in relogio_ids):
+                                            grupo_crachas[grupo].add(cracha)
+                                            grupos_encontrados.append(grupo)
+                                    
+                                    f_log.write(f"OK. Relógios: {list(relogio_ids)}. Locais: {grupos_encontrados}\n")
+                                    
+                                elif sucesso and isinstance(obj_list, list) and len(obj_list) == 0:
+                                    crachas_sem_dados.append(cracha)
+                                    f_log.write("Sem marcação de ponto no período.\n")
+                                elif not sucesso and obj_list is None:
+                                    crachas_inexistentes.append(cracha)
+                                    f_log.write("Chapa não encontrada na base do Kairos.\n")
+                                else:
+                                    f_log.write("Erro na resposta da API.\n")
+                            else:
+                                f_log.write(f"Erro HTTP {response.status_code}.\n")
+                        except Exception as e_api:
+                            f_log.write(f"Falha na requisição: {str(e_api)}.\n")
+                        f_log.flush()
+                    
+                    # 5. Criar agendamentos para cada grupo
+                    f_log.write("\nAgendando comandos de desbloqueio na fila imediata...\n")
+                    f_log.flush()
+                    
+                    config_options = {
+                        'EnviarListaCredenciais': True,
+                        'EnviarListaTemplate': True
+                    }
+                    
+                    agendamentos_criados = 0
+                    for grupo, crachas in grupo_crachas.items():
+                        if crachas:
+                            clock_ids = CLOCK_GROUPS.get(grupo, [])
+                            if clock_ids:
+                                novo_agendamento = AgendamentoComando(
+                                    usuario=f"Sistema (Recorrente Desbloqueio #{command.id})",
+                                    data_hora_execucao=get_local_now().replace(tzinfo=None),
+                                    comandos=json.dumps(config_options),
+                                    matriculas=json.dumps(list(crachas)),
+                                    relogios=json.dumps(clock_ids),
+                                    observacao="Desbloqueio de Férias",
+                                    status='Pendente'
+                                )
+                                db.add(novo_agendamento)
+                                db.flush() # Gerar ID do agendamento
+                                
+                                f_log.write(f" -> Criado agendamento #{novo_agendamento.id} para o local '{grupo}' com as chapas: {list(crachas)}\n")
+                                f_log.flush()
+                                agendamentos_criados += 1
+                    
+                    if agendamentos_criados > 0:
+                        db.commit()
+                        f_log.write(f"\nTotal de {agendamentos_criados} agendamentos gerados com sucesso na fila imediata.\n")
+                    else:
+                        f_log.write("\nNenhum agendamento gerado (nenhum local correspondente encontrado).\n")
+                    f_log.flush()
+
+            elif command.tipo == 'bloqueio_ferias':
+                f_log.write("Iniciando rotina de Bloqueio de Férias...\n")
+                f_log.flush()
+                
+                # 1. Obter data de início das férias desejada (hoje)
+                hoje = now.date()
+                dt_ini_start = datetime.datetime(hoje.year, hoje.month, hoje.day, 0, 0, 0)
+                dt_ini_end = datetime.datetime(hoje.year, hoje.month, hoje.day, 23, 59, 59)
+                
+                f_log.write(f"Filtrando pessoas com Início das Férias em: {hoje.strftime('%d/%m/%Y')}\n")
+                f_log.flush()
+                
+                # 2. Consultar pessoas
+                pessoas = db.query(Pessoa).filter(
+                    Pessoa.data_inicio_ferias != None,
+                    Pessoa.data_inicio_ferias >= dt_ini_start,
+                    Pessoa.data_inicio_ferias <= dt_ini_end
+                ).all()
+                
+                if not pessoas:
+                    f_log.write("Nenhuma pessoa encontrada com início das férias na data atual.\n")
+                    f_log.flush()
+                else:
+                    funcionarios = [int(p.chapa) for p in pessoas if p.chapa and str(p.chapa).isdigit()]
+                    f_log.write(f"Encontrados {len(pessoas)} colaboradores:\n")
+                    for p in pessoas:
+                        f_log.write(f" - Chapa: {p.chapa} | Nome: {p.nome}\n")
+                    f_log.write("\n")
+                    f_log.flush()
+                    
+                    if not funcionarios:
+                        f_log.write("Nenhuma chapa numérica válida para bloqueio.\n")
+                        f_log.flush()
+                    else:
+                        # 3. Buscar todos os relógios ativos
+                        f_log.write("Buscando relógios cadastrados no sistema...\n")
+                        f_log.flush()
+                        
+                        relogios = fetch_clocks()
+                        relogio_list = []
+                        if relogios:
+                            for r in relogios:
+                                num = r.get('RelogioNumero')
+                                if num is not None:
+                                    try:
+                                        relogio_list.append(int(num))
+                                    except ValueError:
+                                        pass
+                        
+                        if not relogio_list:
+                            f_log.write("Nenhum relógio válido cadastrado encontrado para envio.\n")
+                            f_log.flush()
+                        else:
+                            f_log.write(f"Relógios encontrados ({len(relogio_list)}): {relogio_list}\n")
+                            f_log.write("Agendando comandos de bloqueio (Excluir Lista de Credenciais e Excluir Lista de Pessoas) na fila imediata...\n")
+                            f_log.flush()
+                            
+                            # 4. Configurar comandos de bloqueio
+                            config_options = {
+                                "ExcluirListaCredenciais": True,
+                                "ExcluirListaPessoas": True
+                            }
+                            
+                            # 5. Criar agendamento imediato
+                            novo_agendamento = AgendamentoComando(
+                                usuario=f"Sistema (Recorrente Bloqueio #{command.id})",
+                                data_hora_execucao=get_local_now().replace(tzinfo=None),
+                                comandos=json.dumps(config_options),
+                                matriculas=json.dumps(funcionarios),
+                                relogios=json.dumps(relogio_list),
+                                observacao="Bloqueio de férias",
+                                status='Pendente'
+                            )
+                            db.add(novo_agendamento)
+                            db.flush() # Gerar ID do agendamento
+                            
+                            f_log.write(f" -> Criado agendamento de bloqueio imediato #{novo_agendamento.id} para todos os relógios.\n")
+                            f_log.write("Processamento de bloqueio concluído com sucesso.\n")
+                            f_log.flush()
+
+            elif command.tipo == 'bloqueio_ferias_acesso':
+                f_log.write("Iniciando rotina de Bloquear Férias no Acesso II...\n")
+                f_log.flush()
+                
+                # 1. Obter data de início das férias desejada (hoje)
+                hoje = now.date()
+                dt_ini_start = datetime.datetime(hoje.year, hoje.month, hoje.day, 0, 0, 0)
+                dt_ini_end = datetime.datetime(hoje.year, hoje.month, hoje.day, 23, 59, 59)
+                
+                f_log.write(f"Filtrando pessoas com Início das Férias em: {hoje.strftime('%d/%m/%Y')}\n")
+                f_log.flush()
+                
+                # 2. Consultar pessoas
+                pessoas = db.query(Pessoa).filter(
+                    Pessoa.data_inicio_ferias != None,
+                    Pessoa.data_inicio_ferias >= dt_ini_start,
+                    Pessoa.data_inicio_ferias <= dt_ini_end
+                ).all()
+                
+                if not pessoas:
+                    f_log.write("Nenhuma pessoa encontrada com início das férias na data atual.\n")
+                    f_log.flush()
+                else:
+                    f_log.write(f"Encontrados {len(pessoas)} colaboradores para bloqueio no Acesso II:\n")
+                    for p in pessoas:
+                        f_log.write(f" - Chapa: {p.chapa} | Nome: {p.nome}\n")
+                    f_log.write("\n")
+                    f_log.flush()
+                    
+                    # 3. Gerar arquivo CSV (Person Situation = 11, Observation = 'Férias')
+                    csv_path = generate_acesso_csv(pessoas, person_situation=11, observation='Férias')
+                    f_log.write(f"Arquivo CSV gerado em: {csv_path}\n")
+                    f_log.flush()
+                    
+                    # 4. Executar automação Playwright no sistema Acesso II
+                    for line in run_acesso_import(csv_path):
+                        f_log.write(fix_utf8_mojibake(line))
+                        f_log.flush()
+
+            elif command.tipo == 'desbloqueio_ferias_acesso':
+                f_log.write("Iniciando rotina de Desbloquear Férias no Acesso II...\n")
+                f_log.flush()
+                
+                # 1. Obter ontem (D-1)
+                ontem = now.date() - datetime.timedelta(days=1)
+                dt_fim_start = datetime.datetime(ontem.year, ontem.month, ontem.day, 0, 0, 0)
+                dt_fim_end = datetime.datetime(ontem.year, ontem.month, ontem.day, 23, 59, 59)
+                
+                f_log.write(f"Filtrando pessoas com Fim das Férias em: {ontem.strftime('%d/%m/%Y')}\n")
+                f_log.flush()
+                
+                # 2. Consultar pessoas
+                pessoas = db.query(Pessoa).filter(
+                    Pessoa.data_fim_ferias != None,
+                    Pessoa.data_fim_ferias >= dt_fim_start,
+                    Pessoa.data_fim_ferias <= dt_fim_end
+                ).all()
+                
+                if not pessoas:
+                    f_log.write("Nenhuma pessoa encontrada com fim das férias na data filtrada.\n")
+                    f_log.flush()
+                else:
+                    f_log.write(f"Encontrados {len(pessoas)} colaboradores para desbloqueio no Acesso II:\n")
+                    for p in pessoas:
+                        f_log.write(f" - Chapa: {p.chapa} | Nome: {p.nome}\n")
+                    f_log.write("\n")
+                    f_log.flush()
+                    
+                    # 3. Gerar arquivo CSV (Person Situation = 10, Observation = '')
+                    csv_path = generate_acesso_csv(pessoas, person_situation=10, observation='')
+                    f_log.write(f"Arquivo CSV gerado em: {csv_path}\n")
+                    f_log.flush()
+                    
+                    # 4. Executar automação Playwright no sistema Acesso II
+                    for line in run_acesso_import(csv_path):
+                        f_log.write(fix_utf8_mojibake(line))
+                        f_log.flush()
+
+            f_log.write(f"\n--- FIM DA EXECUÇÃO EM {get_local_now().strftime('%d/%m/%Y %H:%M:%S')} ---\n")
+
+        command.log_file = log_filename
+        db.commit()
+
+        novo_log = Log(
+            user_id=None,
+            username=executed_by_user,
+            action=f"Executou comando recorrente #{command.id} ({command.tipo}) com sucesso para todos os relógios"
+        )
+        db.add(novo_log)
+        db.commit()
+
+        if getattr(command, 'enviar_email', False):
+            emails_to_send = []
+            if getattr(command, 'emails_destino', None):
+                raw_emails = command.emails_destino.replace(';', ',').split(',')
+                emails_to_send = [e.strip() for e in raw_emails if e.strip()]
+                
+            if not emails_to_send:
+                creator = db.query(User).filter(User.username == command.usuario).first()
+                if creator and creator.email:
+                    emails_to_send = [creator.email]
+                    
+            if emails_to_send:
+                enviar_email_log(
+                    recorrente_id=command.id,
+                    tipo=command.tipo,
+                    data_hora_str=now.strftime('%d/%m/%Y %H:%M:%S'),
+                    log_filepath=log_filepath,
+                    destinatario_email=emails_to_send
+                )
+        return True
+    except Exception as aut_err:
+        print(f"[AGENDAMENTO WORKER] Erro na execução de recorrente #{command_id}: {aut_err}")
+        if log_filepath:
+            try:
+                with open(log_filepath, 'a', encoding='utf-8') as f_log:
+                    f_log.write(f"\n❌ ERRO NA EXECUÇÃO: {str(aut_err)}\n")
+            except:
+                pass
+        
+        try:
+            if 'command' in locals() and command:
+                if log_filename:
+                    command.log_file = log_filename
+                db.commit()
+
+                novo_log = Log(
+                    user_id=None,
+                    username=executed_by_user,
+                    action=f"Falha ao rodar comando recorrente #{command.id} ({command.tipo}): {str(aut_err)}"
+                )
+                db.add(novo_log)
+                db.commit()
+        except:
+            pass
+        return False
+    finally:
+        db.close()
+
+
 def process_scheduled_commands_worker():
     """
     Worker em segundo plano para executar comandos de relógio agendados no momento correto.
@@ -1840,387 +2284,8 @@ def process_scheduled_commands_worker():
                                 ja_disparado = command.ultimo_disparo.date() == now.date()
                             
                             if not ja_disparado:
-                                command.ultimo_disparo = now_naive
-                                db.commit()
-                                
-                                try:
-                                    log_filename = f"documents/log_recorrente_{command.id}.txt"
-                                    log_filepath = os.path.join(app.root_path, 'static', log_filename)
-                                    
-                                    with open(log_filepath, 'w', encoding='utf-8') as f_log:
-                                        f_log.write(f"--- LOG DE EXECUÇÃO RECORRENTE #{command.id} ---\n")
-                                        f_log.write(f"Tipo: {command.tipo}\n")
-                                        f_log.write(f"Data/Hora de Início: {now.strftime('%d/%m/%Y %H:%M:%S')}\n\n")
-                                        
-                                        if command.tipo == 'datahora':
-                                            for line in run_relogio_automation('datahora', relogio_ids=None):
-                                                f_log.write(line)
-                                                f_log.flush()
-                                        elif command.tipo == 'ponteiro':
-                                            yesterday = now - datetime.timedelta(days=1)
-                                            yesterday_str = yesterday.strftime('%d/%m/%Y')
-                                            for line in run_relogio_automation('ponteiro', data_personalizada=yesterday_str, relogio_ids=None):
-                                                f_log.write(line)
-                                                f_log.flush()
-                                        elif command.tipo == 'verificacao_conclusao':
-                                            for line in run_relogio_automation('verificacao_conclusao', relogio_ids=None):
-                                                f_log.write(line)
-                                                f_log.flush()
-                                        elif command.tipo == 'desbloqueio_ferias':
-                                            f_log.write("Iniciando rotina de Desbloqueio de Férias...\n")
-                                            f_log.flush()
-                                            
-                                            # 1. Obter ontem (D-1)
-                                            ontem = now.date() - datetime.timedelta(days=1)
-                                            dt_fim_start = datetime.datetime(ontem.year, ontem.month, ontem.day, 0, 0, 0)
-                                            dt_fim_end = datetime.datetime(ontem.year, ontem.month, ontem.day, 23, 59, 59)
-                                            
-                                            f_log.write(f"Filtrando pessoas com Fim das Férias em: {ontem.strftime('%d/%m/%Y')}\n")
-                                            f_log.flush()
-                                            
-                                            # 2. Consultar pessoas
-                                            pessoas = db.query(Pessoa).filter(
-                                                Pessoa.data_fim_ferias != None,
-                                                Pessoa.data_fim_ferias >= dt_fim_start,
-                                                Pessoa.data_fim_ferias <= dt_fim_end
-                                            ).all()
-                                            
-                                            if not pessoas:
-                                                f_log.write("Nenhuma pessoa encontrada com fim das férias na data filtrada.\n")
-                                                f_log.flush()
-                                            else:
-                                                matriculas = [p.chapa for p in pessoas if p.chapa]
-                                                f_log.write(f"Encontrados {len(pessoas)} colaboradores:\n")
-                                                for p in pessoas:
-                                                    f_log.write(f" - Chapa: {p.chapa} | Nome: {p.nome}\n")
-                                                f_log.write("\n")
-                                                f_log.flush()
-                                                
-                                                # 3. Calcular período de apuração de 2 meses
-                                                def subtrair_meses_local(dt, meses):
-                                                    import calendar
-                                                    m = dt.month - meses
-                                                    y = dt.year
-                                                    while m <= 0:
-                                                        m += 12
-                                                        y -= 1
-                                                    _, last_d = calendar.monthrange(y, m)
-                                                    d = min(dt.day, last_d)
-                                                    return datetime.date(y, m, d)
-                                                
-                                                start_date_obj = subtrair_meses_local(now.date(), 2)
-                                                end_date_obj = now.date()
-                                                
-                                                start_date_str = start_date_obj.strftime('%d-%m-%Y')
-                                                end_date_str = end_date_obj.strftime('%d-%m-%Y')
-                                                
-                                                f_log.write(f"Período de apuração dos locais de ponto: {start_date_obj.strftime('%d/%m/%Y')} a {end_date_obj.strftime('%d/%m/%Y')}\n")
-                                                f_log.write("Consultando API do Kairos...\n\n")
-                                                f_log.flush()
-                                                
-                                                grupo_crachas = {grupo: set() for grupo in CLOCK_GROUPS}
-                                                crachas_sem_dados = []
-                                                crachas_inexistentes = []
-                                                
-                                                # 4. Consultar locais de ponto para cada colaborador
-                                                for p in pessoas:
-                                                    cracha = p.chapa
-                                                    f_log.write(f"Consultando chapa {cracha} ({p.nome})... ")
-                                                    f_log.flush()
-                                                    
-                                                    payload = {
-                                                        "CrachasPessoa": [cracha],
-                                                        "DataInicio": start_date_str,
-                                                        "DataFim": end_date_str,
-                                                        "CalculoNaoAtualizado": "true",
-                                                        "ResponseType": "AS400V1"
-                                                    }
-                                                    
-                                                    try:
-                                                        response = requests.post(
-                                                            app.config['KAIROS_API_URL'],
-                                                            json=payload,
-                                                            headers=app.config['KAIROS_HEADERS'],
-                                                            timeout=TIMEOUT
-                                                        )
-                                                        
-                                                        if response.status_code == 200:
-                                                            resp_json = response.json()
-                                                            sucesso = resp_json.get("Sucesso")
-                                                            obj_list = resp_json.get("Obj")
-                                                            
-                                                            if sucesso and isinstance(obj_list, list) and len(obj_list) > 0:
-                                                                relogio_ids = set()
-                                                                for item in obj_list:
-                                                                    relogio_id = item.get("RelogioID")
-                                                                    if relogio_id is not None:
-                                                                        relogio_ids.add(relogio_id)
-                                                                        
-                                                                grupos_encontrados = []
-                                                                for grupo, ids_grupo in CLOCK_GROUPS.items():
-                                                                    if any(relogio_id in ids_grupo for relogio_id in relogio_ids):
-                                                                        grupo_crachas[grupo].add(cracha)
-                                                                        grupos_encontrados.append(grupo)
-                                                                
-                                                                f_log.write(f"OK. Relógios: {list(relogio_ids)}. Locais: {grupos_encontrados}\n")
-                                                                
-                                                            elif sucesso and isinstance(obj_list, list) and len(obj_list) == 0:
-                                                                crachas_sem_dados.append(cracha)
-                                                                f_log.write("Sem marcação de ponto no período.\n")
-                                                            elif not sucesso and obj_list is None:
-                                                                crachas_inexistentes.append(cracha)
-                                                                f_log.write("Chapa não encontrada na base do Kairos.\n")
-                                                            else:
-                                                                f_log.write("Erro na resposta da API.\n")
-                                                        else:
-                                                            f_log.write(f"Erro HTTP {response.status_code}.\n")
-                                                    except Exception as e_api:
-                                                        f_log.write(f"Falha na requisição: {str(e_api)}.\n")
-                                                    f_log.flush()
-                                                
-                                                # 5. Criar agendamentos para cada grupo
-                                                f_log.write("\nAgendando comandos de desbloqueio na fila imediata...\n")
-                                                f_log.flush()
-                                                
-                                                config_options = {
-                                                    'EnviarListaCredenciais': True,
-                                                    'EnviarListaTemplate': True
-                                                }
-                                                
-                                                agendamentos_criados = 0
-                                                for grupo, crachas in grupo_crachas.items():
-                                                    if crachas:
-                                                        clock_ids = CLOCK_GROUPS.get(grupo, [])
-                                                        if clock_ids:
-                                                            novo_agendamento = AgendamentoComando(
-                                                                usuario=f"Sistema (Recorrente Desbloqueio #{command.id})",
-                                                                data_hora_execucao=get_local_now().replace(tzinfo=None),
-                                                                comandos=json.dumps(config_options),
-                                                                matriculas=json.dumps(list(crachas)),
-                                                                relogios=json.dumps(clock_ids),
-                                                                observacao="Desbloqueio de Férias",
-                                                                status='Pendente'
-                                                            )
-                                                            db.add(novo_agendamento)
-                                                            db.flush() # Gerar ID do agendamento
-                                                            
-                                                            f_log.write(f" -> Criado agendamento #{novo_agendamento.id} para o local '{grupo}' com as chapas: {list(crachas)}\n")
-                                                            f_log.flush()
-                                                            agendamentos_criados += 1
-                                                
-                                                if agendamentos_criados > 0:
-                                                    db.commit()
-                                                    f_log.write(f"\nTotal de {agendamentos_criados} agendamentos gerados com sucesso na fila imediata.\n")
-                                                else:
-                                                    f_log.write("\nNenhum agendamento gerado (nenhum local correspondente encontrado).\n")
-                                                f_log.flush()
-                                        elif command.tipo == 'bloqueio_ferias':
-                                            f_log.write("Iniciando rotina de Bloqueio de Férias...\n")
-                                            f_log.flush()
-                                            
-                                            # 1. Obter data de início das férias desejada (hoje)
-                                            hoje = now.date()
-                                            dt_ini_start = datetime.datetime(hoje.year, hoje.month, hoje.day, 0, 0, 0)
-                                            dt_ini_end = datetime.datetime(hoje.year, hoje.month, hoje.day, 23, 59, 59)
-                                            
-                                            f_log.write(f"Filtrando pessoas com Início das Férias em: {hoje.strftime('%d/%m/%Y')}\n")
-                                            f_log.flush()
-                                            
-                                            # 2. Consultar pessoas
-                                            pessoas = db.query(Pessoa).filter(
-                                                Pessoa.data_inicio_ferias != None,
-                                                Pessoa.data_inicio_ferias >= dt_ini_start,
-                                                Pessoa.data_inicio_ferias <= dt_ini_end
-                                            ).all()
-                                            
-                                            if not pessoas:
-                                                f_log.write("Nenhuma pessoa encontrada com início das férias na data atual.\n")
-                                                f_log.flush()
-                                            else:
-                                                funcionarios = [int(p.chapa) for p in pessoas if p.chapa and str(p.chapa).isdigit()]
-                                                f_log.write(f"Encontrados {len(pessoas)} colaboradores:\n")
-                                                for p in pessoas:
-                                                    f_log.write(f" - Chapa: {p.chapa} | Nome: {p.nome}\n")
-                                                f_log.write("\n")
-                                                f_log.flush()
-                                                
-                                                if not funcionarios:
-                                                    f_log.write("Nenhuma chapa numérica válida para bloqueio.\n")
-                                                    f_log.flush()
-                                                else:
-                                                    # 3. Buscar todos os relógios ativos
-                                                    f_log.write("Buscando relógios cadastrados no sistema...\n")
-                                                    f_log.flush()
-                                                    
-                                                    relogios = fetch_clocks()
-                                                    relogio_list = []
-                                                    if relogios:
-                                                        for r in relogios:
-                                                            num = r.get('RelogioNumero')
-                                                            if num is not None:
-                                                                try:
-                                                                    relogio_list.append(int(num))
-                                                                except ValueError:
-                                                                    pass
-                                                    
-                                                    if not relogio_list:
-                                                        f_log.write("Nenhum relógio válido cadastrado encontrado para envio.\n")
-                                                        f_log.flush()
-                                                    else:
-                                                        f_log.write(f"Relógios encontrados ({len(relogio_list)}): {relogio_list}\n")
-                                                        f_log.write("Agendando comandos de bloqueio (Excluir Lista de Credenciais e Excluir Lista de Pessoas) na fila imediata...\n")
-                                                        f_log.flush()
-                                                        
-                                                        # 4. Configurar comandos de bloqueio
-                                                        config_options = {
-                                                            "ExcluirListaCredenciais": True,
-                                                            "ExcluirListaPessoas": True
-                                                        }
-                                                        
-                                                        # 5. Criar agendamento imediato
-                                                        novo_agendamento = AgendamentoComando(
-                                                            usuario=f"Sistema (Recorrente Bloqueio #{command.id})",
-                                                            data_hora_execucao=get_local_now().replace(tzinfo=None),
-                                                            comandos=json.dumps(config_options),
-                                                            matriculas=json.dumps(funcionarios),
-                                                            relogios=json.dumps(relogio_list),
-                                                            observacao="Bloqueio de férias",
-                                                            status='Pendente'
-                                                        )
-                                                        db.add(novo_agendamento)
-                                                        db.flush() # Gerar ID do agendamento
-                                                        
-                                                        f_log.write(f" -> Criado agendamento de bloqueio imediato #{novo_agendamento.id} para todos os relógios.\n")
-                                                        f_log.write("Processamento de bloqueio concluído com sucesso.\n")
-                                                        f_log.flush()
-                                        elif command.tipo == 'bloqueio_ferias_acesso':
-                                            f_log.write("Iniciando rotina de Bloquear Férias no Acesso II...\n")
-                                            f_log.flush()
-                                            
-                                            # 1. Obter data de início das férias desejada (hoje)
-                                            hoje = now.date()
-                                            dt_ini_start = datetime.datetime(hoje.year, hoje.month, hoje.day, 0, 0, 0)
-                                            dt_ini_end = datetime.datetime(hoje.year, hoje.month, hoje.day, 23, 59, 59)
-                                            
-                                            f_log.write(f"Filtrando pessoas com Início das Férias em: {hoje.strftime('%d/%m/%Y')}\n")
-                                            f_log.flush()
-                                            
-                                            # 2. Consultar pessoas
-                                            pessoas = db.query(Pessoa).filter(
-                                                Pessoa.data_inicio_ferias != None,
-                                                Pessoa.data_inicio_ferias >= dt_ini_start,
-                                                Pessoa.data_inicio_ferias <= dt_ini_end
-                                            ).all()
-                                            
-                                            if not pessoas:
-                                                f_log.write("Nenhuma pessoa encontrada com início das férias na data atual.\n")
-                                                f_log.flush()
-                                            else:
-                                                f_log.write(f"Encontrados {len(pessoas)} colaboradores para bloqueio no Acesso II:\n")
-                                                for p in pessoas:
-                                                    f_log.write(f" - Chapa: {p.chapa} | Nome: {p.nome}\n")
-                                                f_log.write("\n")
-                                                f_log.flush()
-                                                
-                                                # 3. Gerar arquivo CSV (Person Situation = 11, Observation = 'Férias')
-                                                csv_path = generate_acesso_csv(pessoas, person_situation=11, observation='Férias')
-                                                f_log.write(f"Arquivo CSV gerado em: {csv_path}\n")
-                                                f_log.flush()
-                                                
-                                                # 4. Executar automação Playwright no sistema Acesso II
-                                                for line in run_acesso_import(csv_path):
-                                                    f_log.write(line)
-                                                    f_log.flush()
-                                        elif command.tipo == 'desbloqueio_ferias_acesso':
-                                            f_log.write("Iniciando rotina de Desbloquear Férias no Acesso II...\n")
-                                            f_log.flush()
-                                            
-                                            # 1. Obter ontem (D-1)
-                                            ontem = now.date() - datetime.timedelta(days=1)
-                                            dt_fim_start = datetime.datetime(ontem.year, ontem.month, ontem.day, 0, 0, 0)
-                                            dt_fim_end = datetime.datetime(ontem.year, ontem.month, ontem.day, 23, 59, 59)
-                                            
-                                            f_log.write(f"Filtrando pessoas com Fim das Férias em: {ontem.strftime('%d/%m/%Y')}\n")
-                                            f_log.flush()
-                                            
-                                            # 2. Consultar pessoas
-                                            pessoas = db.query(Pessoa).filter(
-                                                Pessoa.data_fim_ferias != None,
-                                                Pessoa.data_fim_ferias >= dt_fim_start,
-                                                Pessoa.data_fim_ferias <= dt_fim_end
-                                            ).all()
-                                            
-                                            if not pessoas:
-                                                f_log.write("Nenhuma pessoa encontrada com fim das férias na data filtrada.\n")
-                                                f_log.flush()
-                                            else:
-                                                f_log.write(f"Encontrados {len(pessoas)} colaboradores para desbloqueio no Acesso II:\n")
-                                                for p in pessoas:
-                                                    f_log.write(f" - Chapa: {p.chapa} | Nome: {p.nome}\n")
-                                                f_log.write("\n")
-                                                f_log.flush()
-                                                
-                                                # 3. Gerar arquivo CSV (Person Situation = 10, Observation = '')
-                                                csv_path = generate_acesso_csv(pessoas, person_situation=10, observation='')
-                                                f_log.write(f"Arquivo CSV gerado em: {csv_path}\n")
-                                                f_log.flush()
-                                                
-                                                # 4. Executar automação Playwright no sistema Acesso II
-                                                for line in run_acesso_import(csv_path):
-                                                    f_log.write(line)
-                                                    f_log.flush()
-                                        
-                                        f_log.write(f"\n--- FIM DA EXECUÇÃO EM {get_local_now().strftime('%d/%m/%Y %H:%M:%S')} ---\n")
-                                    
-                                    command.log_file = log_filename
-                                    db.commit()
-
-                                    novo_log = Log(
-                                        user_id=None,
-                                        username='Sistema (Recorrente)',
-                                        action=f"Executou comando recorrente #{command.id} ({command.tipo}) com sucesso para todos os relógios"
-                                    )
-                                    db.add(novo_log)
-                                    db.commit()
-
-                                    if getattr(command, 'enviar_email', False):
-                                        emails_to_send = []
-                                        if getattr(command, 'emails_destino', None):
-                                            raw_emails = command.emails_destino.replace(';', ',').split(',')
-                                            emails_to_send = [e.strip() for e in raw_emails if e.strip()]
-                                            
-                                        if not emails_to_send:
-                                            creator = db.query(User).filter(User.username == command.usuario).first()
-                                            if creator and creator.email:
-                                                emails_to_send = [creator.email]
-                                                
-                                        if emails_to_send:
-                                            enviar_email_log(
-                                                recorrente_id=command.id,
-                                                tipo=command.tipo,
-                                                data_hora_str=now.strftime('%d/%m/%Y %H:%M:%S'),
-                                                log_filepath=log_filepath,
-                                                destinatario_email=emails_to_send
-                                            )
-
-                                except Exception as aut_err:
-                                    print(f"[AGENDAMENTO WORKER] Erro na execução de recorrente #{command.id}: {aut_err}")
-                                    try:
-                                        with open(log_filepath, 'a', encoding='utf-8') as f_log:
-                                            f_log.write(f"\n❌ ERRO NA EXECUÇÃO: {str(aut_err)}\n")
-                                    except:
-                                        pass
-                                    
-                                    command.log_file = log_filename
-                                    db.commit()
-
-                                    novo_log = Log(
-                                        user_id=None,
-                                        username='Sistema (Recorrente)',
-                                        action=f"Falha ao rodar comando recorrente #{command.id} ({command.tipo}): {str(aut_err)}"
-                                    )
-                                    db.add(novo_log)
-                                    db.commit()
+                                # Dispara a execução utilizando a função unificada
+                                execute_recurrent_command(command.id, "Sistema (Recorrente)")
             except Exception as rec_err:
                 print(f"[AGENDAMENTO WORKER] Erro no processamento de recorrentes: {rec_err}")
 
