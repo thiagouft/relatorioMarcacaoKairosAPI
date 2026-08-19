@@ -16,7 +16,7 @@ def generate_acesso_csv(pessoas, person_situation, observation, output_path=None
     Gera o arquivo CSV formatado para importação no DIMEP Acesso II.
     pessoas: lista de objetos ou dicionários contendo 'chapa' (ou 'matricula') e 'nome'.
     person_situation: 11 (Bloqueio) ou 10 (Desbloqueio)
-    observation: 'Férias' (Bloqueio) ou '' (Desbloqueio)
+    observation: 'Férias' (Bloqueio) ou "'" (Desbloqueio)
     output_path: caminho para salvar o arquivo. Se None, gera em static/documents/ com timestamp.
     """
     if not output_path:

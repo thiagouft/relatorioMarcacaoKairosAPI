@@ -2118,8 +2118,8 @@ def execute_recurrent_command(command_id, executed_by_user="Sistema (Recorrente)
                     f_log.write("\n")
                     f_log.flush()
                     
-                    # 3. Gerar arquivo CSV (Person Situation = 10, Observation = '')
-                    csv_path = generate_acesso_csv(pessoas, person_situation=10, observation='')
+                    # 3. Gerar arquivo CSV (Person Situation = 10, Observation = "'")
+                    csv_path = generate_acesso_csv(pessoas, person_situation=10, observation="'")
                     f_log.write(f"Arquivo CSV gerado em: {csv_path}\n")
                     f_log.flush()
                     
