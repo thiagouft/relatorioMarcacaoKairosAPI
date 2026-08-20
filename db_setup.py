@@ -118,6 +118,8 @@ class ComandoRecorrente(Base):
     tipo = Column(String(50), nullable=False)  # 'datahora' ou 'ponteiro'
     data_inicio = Column(DateTime, nullable=False)  # Data inicial de ativação do loop diário
     hora_execucao = Column(String(5), nullable=False)  # Formato 'HH:MM'
+    frequencia = Column(String(20), default='diario', nullable=True)  # 'diario' ou 'semanal'
+    dias_semana = Column(String(100), nullable=True)  # Lista de dias ex: '0,1,2,3,4,5,6' (0=Seg, 1=Ter, etc.)
     ultimo_disparo = Column(DateTime, nullable=True)  # Data/hora UTC do último disparo diário
     log_file = Column(String(500), nullable=True)  # Nome do arquivo da última execução (.txt)
     enviar_email = Column(Boolean, default=False, nullable=True)

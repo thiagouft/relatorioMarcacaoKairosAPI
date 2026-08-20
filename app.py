@@ -36,7 +36,7 @@ from utils_envio_comando import (
     generate_cabecalho_arquivo
 )
 from automacao_relogio import run_relogio_automation
-from automacao_acesso import generate_acesso_csv, run_acesso_import
+from automacao_acesso import generate_acesso_csv, run_acesso_import, run_envio_credenciais_acesso
 app = Flask(__name__)
 app.config.from_object(Config)
 
@@ -133,6 +133,8 @@ def enviar_email_log(recorrente_id, tipo, data_hora_str, log_filepath, destinata
         'bloqueio_ferias': 'Bloqueio de Férias',
         'bloqueio_ferias_acesso': 'Bloquear férias acesso II',
         'desbloqueio_ferias_acesso': 'Desbloquear férias acesso II',
+        'envio_credenciais_acesso': 'Envio de Credenciais Acesso II',
+        'bloqueio_desligamento': 'Bloqueio de desligamento',
         'verificacao_conclusao': 'Verificação de Conclusão de comando'
     }
     tipo_bonito = tipos_nome.get(tipo, tipo)
@@ -560,13 +562,23 @@ def criar_comando_recorrente():
             return redirect(url_for('comandos_recorrentes'))
             
         data_inicio = datetime.datetime.strptime(data_inicio_str, '%Y-%m-%d')
+
+        frequencia = request.form.get('frequencia', 'diario')
+        dias_semana_list = request.form.getlist('dias_semana')
+        dias_semana_str = ",".join(dias_semana_list) if (frequencia == 'semanal' and dias_semana_list) else None
         
+        if frequencia == 'semanal' and not dias_semana_str:
+            flash('Selecione pelo menos um dia da semana para a recorrência semanal.', 'danger')
+            return redirect(url_for('comandos_recorrentes'))
+
         db = get_db_session()
         novo = ComandoRecorrente(
             usuario=session.get('username', 'Admin'),
             tipo=tipo,
             data_inicio=data_inicio,
             hora_execucao=hora_execucao,
+            frequencia=frequencia,
+            dias_semana=dias_semana_str,
             enviar_email=enviar_email,
             emails_destino=emails_destino
         )
@@ -639,6 +651,35 @@ def editar_emails_comando_recorrente(id):
         db.close()
     except Exception as e:
         flash(f'Erro ao atualizar e-mails: {str(e)}', 'danger')
+        
+    return redirect(url_for('comandos_recorrentes'))
+
+@app.route('/admin/comandos_recorrentes/editar_frequencia/<int:id>', methods=['POST'])
+@login_required
+@permission_required('envio_comando')
+def editar_frequencia_comando_recorrente(id):
+    try:
+        frequencia = request.form.get('frequencia', 'diario')
+        dias_semana_list = request.form.getlist('dias_semana')
+        dias_semana_str = ",".join(dias_semana_list) if (frequencia == 'semanal' and dias_semana_list) else None
+        
+        if frequencia == 'semanal' and not dias_semana_str:
+            flash('Selecione pelo menos um dia da semana para a recorrência semanal.', 'danger')
+            return redirect(url_for('comandos_recorrentes'))
+
+        db = get_db_session()
+        comando = db.query(ComandoRecorrente).get(id)
+        if comando:
+            comando.frequencia = frequencia
+            comando.dias_semana = dias_semana_str
+            db.commit()
+            log_action(f"Alterou frequência do comando recorrente #{id} para {frequencia} ({dias_semana_str})")
+            flash(f'Frequência do comando recorrente #{id} atualizada com sucesso!', 'success')
+        else:
+            flash('Comando recorrente não encontrado.', 'danger')
+        db.close()
+    except Exception as e:
+        flash(f'Erro ao alterar frequência do comando: {str(e)}', 'danger')
         
     return redirect(url_for('comandos_recorrentes'))
 
@@ -2128,6 +2169,174 @@ def execute_recurrent_command(command_id, executed_by_user="Sistema (Recorrente)
                         f_log.write(fix_utf8_mojibake(line))
                         f_log.flush()
 
+            elif command.tipo == 'envio_credenciais_acesso':
+                f_log.write("Iniciando rotina de Envio de Credenciais no Acesso II...\n")
+                f_log.flush()
+                
+                # Executar automação Playwright de Envio de Credenciais no Acesso II
+                for line in run_envio_credenciais_acesso():
+                    f_log.write(fix_utf8_mojibake(line))
+                    f_log.flush()
+
+            elif command.tipo == 'bloqueio_desligamento':
+                f_log.write("Iniciando rotina de Bloqueio de Desligamento...\n")
+                f_log.flush()
+                
+                # Período de 1 semana anterior (ex: se hoje é 19/08/2026, busca de 12/08/2026 a 18/08/2026)
+                hoje = now.date()
+                data_fim = hoje - datetime.timedelta(days=1)
+                data_inicio = hoje - datetime.timedelta(days=7)
+                
+                dt_dem_start = datetime.datetime(data_inicio.year, data_inicio.month, data_inicio.day, 0, 0, 0)
+                dt_dem_end = datetime.datetime(data_fim.year, data_fim.month, data_fim.day, 23, 59, 59)
+                
+                f_log.write(f"Filtrando pessoas com Demissão no período de 1 semana anterior: {data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}\n")
+                f_log.flush()
+                
+                # Consultar pessoas demitidas na data de hoje
+                sit_demitido = db.query(Situacao).filter_by(descricao='Demitido').first()
+                if sit_demitido:
+                    pessoas = db.query(Pessoa).filter(
+                        Pessoa.situacao_id == sit_demitido.id,
+                        Pessoa.data_demissao != None,
+                        Pessoa.data_demissao >= dt_dem_start,
+                        Pessoa.data_demissao <= dt_dem_end
+                    ).all()
+                else:
+                    pessoas = db.query(Pessoa).filter(
+                        Pessoa.data_demissao != None,
+                        Pessoa.data_demissao >= dt_dem_start,
+                        Pessoa.data_demissao <= dt_dem_end
+                    ).all()
+                
+                if not pessoas:
+                    f_log.write("Nenhuma pessoa encontrada com demissão na data de hoje.\n")
+                    f_log.flush()
+                else:
+                    f_log.write(f"Encontrados {len(pessoas)} colaboradores para bloqueio de desligamento:\n")
+                    for p in pessoas:
+                        dt_str = p.data_demissao.strftime('%d/%m/%Y') if p.data_demissao else hoje.strftime('%d/%m/%Y')
+                        f_log.write(f" - Chapa: {p.chapa} | Nome: {p.nome} | Data Demissão: {dt_str}\n")
+                    f_log.write("\n")
+                    f_log.flush()
+                    
+                    funcionarios = [int(p.chapa) for p in pessoas if p.chapa and str(p.chapa).isdigit()]
+                    
+                    # 1º PASSO: Exclusão nos relógios de ponto (Kairos)
+                    if not funcionarios:
+                        f_log.write("1º PASSO: Nenhuma chapa numérica válida para bloqueio nos relógios.\n\n")
+                        f_log.flush()
+                    else:
+                        f_log.write("1º PASSO: Buscando relógios e executando exclusão direta no Kairos...\n")
+                        f_log.flush()
+                        
+                        relogios = fetch_clocks()
+                        relogio_list = []
+                        if relogios:
+                            for r in relogios:
+                                num = r.get('RelogioNumero')
+                                if num is not None:
+                                    try:
+                                        relogio_list.append(int(num))
+                                    except ValueError:
+                                        pass
+                        
+                        if not relogio_list:
+                            f_log.write("Nenhum relógio válido cadastrado encontrado para envio de bloqueio.\n\n")
+                            f_log.flush()
+                        else:
+                            f_log.write(f"Relógios encontrados ({len(relogio_list)}): {relogio_list}\n")
+                            f_log.write("Disparando comando de exclusão nos relógios...\n")
+                            f_log.flush()
+                            
+                            config_options = {
+                                "ExcluirListaCredenciais": True,
+                                "ExcluirListaPessoas": True
+                            }
+                            
+                            # Buscar dados dos crachás ANTES de marcar como desligado na API Kairos
+                            crachas_sucesso = []
+                            pesquisa_falha = []
+                            for cracha in funcionarios:
+                                res = fetch_cracha(cracha)
+                                if res.get('sucesso'):
+                                    crachas_sucesso.append(res)
+                                else:
+                                    pesquisa_falha.append(res)
+                            
+                            if crachas_sucesso:
+                                cracha_list = [c.get('cracha') for c in crachas_sucesso]
+                                mapped_clock_ids = list(dict.fromkeys([33 if cid == 35 else 34 if cid == 36 else cid for cid in relogio_list]))
+                                schedule_result = schedule_commands(cracha_list, config_options, mapped_clock_ids)
+                                
+                                novo_agendamento = AgendamentoComando(
+                                    usuario=f"Sistema (Recorrente Desligamento #{command.id})",
+                                    data_hora_execucao=get_local_now().replace(tzinfo=None),
+                                    comandos=json.dumps(config_options),
+                                    matriculas=json.dumps(cracha_list),
+                                    relogios=json.dumps(mapped_clock_ids),
+                                    observacao="Desligamento",
+                                    status='Executado' if schedule_result.get('sucesso') else 'Erro',
+                                    resultado=schedule_result.get('mensagem', 'Comando agendado com sucesso')
+                                )
+                                db.add(novo_agendamento)
+                                db.flush()
+
+                                # Gerar arquivos de sucesso (PDF) e falhas (TXT) para exibição na página de Comandos Agendados
+                                try:
+                                    sucesso_f, falha_f = generate_reports_for_job(novo_agendamento, pesquisa_falha, crachas_sucesso, config_options, mapped_clock_ids, app.root_path)
+                                    novo_agendamento.sucesso_file = sucesso_f
+                                    novo_agendamento.falha_file = falha_f
+                                    db.flush()
+                                except Exception as r_err:
+                                    print(f"[RECORRENTE DESLIGAMENTO] Erro ao gerar relatórios PDF/TXT: {r_err}")
+
+                                f_log.write(f" -> Comando enviado nos relógios com sucesso. Agendamento #{novo_agendamento.id} registrado.\n\n")
+                            else:
+                                f_log.write(f" -> Falha ao buscar crachás nos relógios: {pesquisa_falha}\n\n")
+                            f_log.flush()
+                    
+                    # 2º PASSO: Bloqueio no Acesso II via Playwright
+                    f_log.write("2º PASSO: Gerando arquivo CSV e executando automação no Acesso II...\n")
+                    f_log.flush()
+                    
+                    obs_func = lambda p_item: f"Desligado {getattr(p_item, 'data_demissao').strftime('%d/%m/%Y')}" if getattr(p_item, 'data_demissao', None) else f"Desligado {data_fim.strftime('%d/%m/%Y')}"
+                    
+                    csv_path = generate_acesso_csv(pessoas, person_situation=11, observation=obs_func)
+                    f_log.write(f"Arquivo CSV de desligamento gerado em: {csv_path}\n")
+                    f_log.flush()
+                    
+                    for line in run_acesso_import(csv_path):
+                        f_log.write(fix_utf8_mojibake(line))
+                        f_log.flush()
+                    f_log.write("\n")
+                    
+                    # Pausa de 60 segundos recomendada entre a automação e o desligamento final
+                    f_log.write("⏳ Aguardando 60 segundos antes da execução do 3º PASSO...\n")
+                    f_log.flush()
+                    time.sleep(60)
+                    
+                    # 3º PASSO (ÚLTIMO): Marcação de desligamento na API Kairos
+                    f_log.write("3º PASSO: Executando marcação final de desligamento na API Kairos...\n")
+                    f_log.flush()
+                    for p in pessoas:
+                        chapa = p.chapa
+                        if chapa:
+                            dt_dem = p.data_demissao or hoje
+                            data_desligamento = dt_dem.strftime('%Y/%m/%d')
+                            f_log.write(f" -> Processando desligamento para chapa {chapa} (Data: {data_desligamento})...\n")
+                            f_log.flush()
+                            result = fetch_cracha(chapa)
+                            if result.get('sucesso'):
+                                dismiss_result = dismiss_employee(result, data_desligamento)
+                                if dismiss_result.get('sucesso'):
+                                    f_log.write(f"    ✅ Desligamento efetuado na API Kairos com sucesso.\n")
+                                else:
+                                    f_log.write(f"    ❌ Falha no desligamento na API Kairos: {dismiss_result.get('mensagem')}\n")
+                            else:
+                                f_log.write(f"    ❌ Consulta do crachá falhou (já desligado ou erro): {result.get('mensagem')}\n")
+                            f_log.flush()
+
             f_log.write(f"\n--- FIM DA EXECUÇÃO EM {get_local_now().strftime('%d/%m/%Y %H:%M:%S')} ---\n")
 
         command.log_file = log_filename
@@ -2284,6 +2493,15 @@ def process_scheduled_commands_worker():
                                 ja_disparado = command.ultimo_disparo.date() == now.date()
                             
                             if not ja_disparado:
+                                # Checar se a frequência é semanal e se hoje é um dos dias da semana selecionados
+                                freq = getattr(command, 'frequencia', 'diario') or 'diario'
+                                if freq == 'semanal':
+                                    dias_str = getattr(command, 'dias_semana', '') or ''
+                                    dias_permitidos = [int(d.strip()) for d in dias_str.split(',') if d.strip().isdigit()]
+                                    # Python weekday(): 0=Segunda, 1=Terça, 2=Quarta, 3=Quinta, 4=Sexta, 5=Sábado, 6=Domingo
+                                    if now.weekday() not in dias_permitidos:
+                                        continue
+
                                 # Dispara a execução utilizando a função unificada
                                 execute_recurrent_command(command.id, "Sistema (Recorrente)")
             except Exception as rec_err:

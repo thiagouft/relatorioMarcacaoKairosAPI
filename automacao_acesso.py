@@ -34,7 +34,10 @@ def generate_acesso_csv(pessoas, person_situation, observation, output_path=None
         chapa_str = str(chapa).strip() if chapa is not None else ''
         nome_str = str(nome).strip() if nome is not None else ''
         sit_str = str(person_situation)
-        obs_str = str(observation) if observation is not None else ''
+        if callable(observation):
+            obs_str = str(observation(p))
+        else:
+            obs_str = str(observation) if observation is not None else ''
         
         row = f"{chapa_str};{nome_str};CONSÓRCIO PONTE RIO TOCANTINS;1;;{sit_str};0;16/06/2025;16/06/2099;4;;;;;;;;;;{obs_str};TRUE;;;false\n"
         lines.append(row)
@@ -166,6 +169,149 @@ def run_acesso_import(csv_path, output_dir=None):
         try:
             if browser and 'page' in locals() and page:
                 screenshot_err = os.path.join(output_dir, f"acesso_exec_err_{int(time.time())}.png")
+                page.screenshot(path=screenshot_err)
+                yield f"⚠️ Screenshot do erro salva em: {screenshot_err}\n"
+        except Exception as se:
+            yield f"⚠️ Não foi possível capturar screenshot: {str(se)}\n"
+    finally:
+        if browser:
+            try:
+                browser.close()
+            except:
+                pass
+        if p:
+            try:
+                p.stop()
+            except:
+                pass
+        yield "🔒 Navegador encerrado.\n"
+
+
+def run_envio_credenciais_acesso(output_dir=None):
+    """
+    Executa a automação de Envio de Credenciais no DIMEP Acesso II via Playwright.
+    Navega até SendingCommand.aspx, clica na aba 'Lista', marca o comando de credenciais e todos os equipamentos, e envia.
+    Emite logs passo a passo via gerador (yield).
+    """
+    login = os.environ.get("ACESSO_LOGIN") or os.environ.get("LOGIN", "mixestec")
+    senha = os.environ.get("ACESSO_SENHA") or os.environ.get("SENHA", "Dimep@123")
+    base_url = os.environ.get("ACESSO_URL", "https://ponteriotocantins.dimep-ams.com.br").rstrip('/')
+    headless_str = os.environ.get("ACESSO_HEADLESS") or os.environ.get("HEADLESS", "True")
+    
+    headless = headless_str.lower() in ("true", "1", "yes")
+
+    base_project_dir = os.path.dirname(os.path.abspath(__file__))
+    if not output_dir:
+        output_dir = os.path.join(base_project_dir, 'static', 'documents')
+    os.makedirs(output_dir, exist_ok=True)
+
+    yield "🔄 Inicializando navegador Playwright para Envio de Credenciais no Acesso II...\n"
+    yield f"🌐 URL Alvo: {base_url}\n"
+
+    p = None
+    browser = None
+    try:
+        p = sync_playwright().start()
+        browser = p.chromium.launch(headless=headless)
+        context = browser.new_context(viewport={"width": 1280, "height": 800})
+        page = context.new_page()
+
+        # 1. Acesso à página de Logon
+        login_url = f"{base_url}/logon.aspx"
+        yield f"🔄 Acessando página de login ({login_url})...\n"
+        page.goto(login_url, wait_until='domcontentloaded', timeout=60000)
+        
+        page.wait_for_selector("#txtUsrLogin", timeout=30000)
+        yield "🔐 Preenchendo credenciais de acesso...\n"
+        page.fill("#txtUsrLogin", login)
+        page.fill("#txtUserPassLogin", senha)
+        
+        yield "🔄 Clicando em Entrar...\n"
+        page.click("#Submit1")
+        page.wait_for_load_state("domcontentloaded", timeout=60000)
+        yield "✅ Login efetuado com sucesso.\n"
+        
+        # 2. Navegação para a página Envio de Comando
+        sending_url = f"{base_url}/SendingCommand/SendingCommand.aspx"
+        yield f"🔄 Navegando para a página de Envio de Comando ({sending_url})...\n"
+        page.goto(sending_url, wait_until='domcontentloaded', timeout=60000)
+        
+        # Validação de acesso
+        if "SendingCommand.aspx" not in page.url:
+            yield f"❌ Erro: Falha ao acessar página de Envio de Comando. URL atual: {page.url}\n"
+            screenshot_err = os.path.join(output_dir, f"acesso_sending_auth_err_{int(time.time())}.png")
+            page.screenshot(path=screenshot_err)
+            yield f"⚠️ Screenshot salva em: {screenshot_err}\n"
+            return
+
+        # 3. Clicar na aba Lista (<a href="#subtabs3"> Lista</a>)
+        yield "🔄 Clicando na aba 'Lista'...\n"
+        tab_selector = 'a[href="#subtabs3"]'
+        page.wait_for_selector(tab_selector, timeout=30000)
+        page.click(tab_selector)
+        time.sleep(1.5)
+
+        # 4. Marcar checkbox do comando (ctl00_ctl00_MainContentMainMaster_MainContent_lstViewListCommands_ctrl2_chkCommand)
+        chk_cmd_selector = "#ctl00_ctl00_MainContentMainMaster_MainContent_lstViewListCommands_ctrl2_chkCommand"
+        yield "🔄 Marcando o comando na lista...\n"
+        page.wait_for_selector(chk_cmd_selector, timeout=30000)
+        if not page.is_checked(chk_cmd_selector):
+            page.click(chk_cmd_selector)
+        time.sleep(1.5)
+
+        # 4.1 Clicar no botão 'Ok' da tela/modal de confirmação de credenciais
+        btn_ok_selector = "#MainContentMainMaster_MainContent_CredentialTotal_btnOk"
+        yield "🔄 Aguardando tela de confirmação e clicando em 'Ok'...\n"
+        
+        target_page = page
+        if len(context.pages) > 1:
+            target_page = context.pages[-1]
+            yield f"ℹ️ Detectada nova aba/janela ({target_page.url})...\n"
+
+        try:
+            target_page.wait_for_selector(btn_ok_selector, state="visible", timeout=15000)
+            target_page.click(btn_ok_selector)
+            time.sleep(1.5)
+            yield "✅ Clique em 'Ok' realizado com sucesso.\n"
+        except Exception as e_ok:
+            ok_clicked = False
+            for p_item in context.pages:
+                try:
+                    btn = p_item.query_selector(btn_ok_selector) or p_item.query_selector("input[value='Ok']")
+                    if btn:
+                        btn.click()
+                        ok_clicked = True
+                        yield "✅ Clique em 'Ok' realizado (via fallback).\n"
+                        break
+                except Exception:
+                    pass
+            if not ok_clicked:
+                yield "⚠️ Botão 'Ok' não localizado ou tela já confirmada. Prosseguindo com o fluxo...\n"
+
+        # 5. Marcar checkbox de todos os equipamentos (MainContentMainMaster_MainContent_chkAllEquipments)
+        chk_equip_selector = "#MainContentMainMaster_MainContent_chkAllEquipments"
+        yield "🔄 Marcando todos os equipamentos...\n"
+        page.wait_for_selector(chk_equip_selector, timeout=30000)
+        if not page.is_checked(chk_equip_selector):
+            page.click(chk_equip_selector)
+        time.sleep(1.5)
+
+        # 6. Clicar no botão Enviar (MainContentMainMaster_MainContent_btnSend)
+        btn_send_selector = "#MainContentMainMaster_MainContent_btnSend"
+        yield "🔄 Clicando no botão Enviar...\n"
+        page.wait_for_selector(btn_send_selector, timeout=30000)
+        page.click(btn_send_selector)
+        page.wait_for_load_state("domcontentloaded", timeout=60000)
+        time.sleep(2.0)
+
+        yield "✅ Comando de Envio de Credenciais Acesso II enviado com sucesso!\n"
+        yield "\n🏁 Automação no Acesso II concluída com sucesso!\n"
+
+    except Exception as e:
+        yield f"❌ Erro durante a automação de Envio de Credenciais no Acesso II: {str(e)}\n"
+        try:
+            if browser and 'page' in locals() and page:
+                screenshot_err = os.path.join(output_dir, f"acesso_sending_exec_err_{int(time.time())}.png")
                 page.screenshot(path=screenshot_err)
                 yield f"⚠️ Screenshot do erro salva em: {screenshot_err}\n"
         except Exception as se:

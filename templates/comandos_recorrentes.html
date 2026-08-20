@@ -40,6 +40,7 @@
                         <tr>
                             <th>ID</th>
                             <th>Tipo de Comando</th>
+                            <th>Frequência</th>
                             <th>Início da Recorrência</th>
                             <th>Horário Diário</th>
                             <th>Criado Por</th>
@@ -66,11 +67,41 @@
                                 <strong style="color: #d32f2f;">🏖️ Bloquear férias acesso II</strong>
                                 {% elif cmd.tipo == 'desbloqueio_ferias_acesso' %}
                                 <strong style="color: #e65100;">🏖️ Desbloquear férias acesso II</strong>
+                                {% elif cmd.tipo == 'envio_credenciais_acesso' %}
+                                <strong style="color: #00838f;">🔑 Envio de Credenciais Acesso II</strong>
+                                {% elif cmd.tipo == 'bloqueio_desligamento' %}
+                                <strong style="color: #c62828;">🚫 Bloqueio de desligamento</strong>
                                 {% elif cmd.tipo == 'verificacao_conclusao' %}
                                 <strong style="color: #9c27b0;">🔍 Verificação de Conclusão de comando</strong>
                                 {% else %}
                                 {{ cmd.tipo }}
                                 {% endif %}
+                            </td>
+                            <td style="white-space: nowrap;">
+                                <div style="display: inline-flex; align-items: center; gap: 6px;">
+                                    {% if cmd.frequencia == 'semanal' and cmd.dias_semana %}
+                                        <span style="display: inline-flex; align-items: center; gap: 4px; background-color: #e8f5e9; color: #2e7d32; padding: 3px 8px; border-radius: 4px; font-weight: 600; font-size: 0.8rem; border: 1px solid #a5d6a7;">
+                                            📅
+                                            {% set dias_map = {'0': 'Seg', '1': 'Ter', '2': 'Qua', '3': 'Qui', '4': 'Sex', '5': 'Sáb', '6': 'Dom'} %}
+                                            {% set lista_dias = cmd.dias_semana.split(',') %}
+                                            {% set nomes = [] %}
+                                            {% for d in lista_dias %}
+                                                {% if d in dias_map %}
+                                                    {% set _ = nomes.append(dias_map[d]) %}
+                                                {% endif %}
+                                            {% endfor %}
+                                            {{ nomes|join(', ') }}
+                                        </span>
+                                    {% else %}
+                                        <span style="display: inline-flex; align-items: center; gap: 4px; background-color: #e3f2fd; color: #1565c0; padding: 3px 8px; border-radius: 4px; font-weight: 600; font-size: 0.8rem; border: 1px solid #90caf9;">
+                                            🔄 Diário
+                                        </span>
+                                    {% endif %}
+                                    <button type="button" title="Editar Frequência" onclick="openEditFrequenciaModal({{ cmd.id }}, '{{ cmd.frequencia or 'diario' }}', '{{ cmd.dias_semana or '' }}')"
+                                        style="background: none; border: none; font-size: 1rem; cursor: pointer; padding: 2px; line-height: 1; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">
+                                        ✏️
+                                    </button>
+                                </div>
                             </td>
                             <td>{{ cmd.data_inicio.strftime('%d/%m/%Y') }}</td>
                             <td>{{ cmd.hora_execucao }}</td>
@@ -167,6 +198,8 @@
                         <option value="bloqueio_ferias">🏖️ Bloqueio de Férias</option>
                         <option value="bloqueio_ferias_acesso">🏖️ Bloquear férias acesso II</option>
                         <option value="desbloqueio_ferias_acesso">🏖️ Desbloquear férias acesso II</option>
+                        <option value="envio_credenciais_acesso">🔑 Envio de Credenciais Acesso II</option>
+                        <option value="bloqueio_desligamento">🚫 Bloqueio de desligamento</option>
                         <option value="verificacao_conclusao">🔍 Verificação de Conclusão de comando (Todos os Relógios)</option>
                     </select>
                 </div>
@@ -176,8 +209,33 @@
                     <input type="date" name="data_inicio" id="data_inicio" class="form-control" required>
                 </div>
                 
+                <div class="form-group" style="margin-top: 15px;">
+                    <label style="font-weight: 600; font-size: 0.9rem;">Frequência de Disparo</label>
+                    <div style="display: flex; gap: 20px; margin-top: 5px;">
+                        <label style="cursor: pointer; font-weight: normal; font-size: 0.9rem; display: flex; align-items: center; gap: 6px;">
+                            <input type="radio" name="frequencia" value="diario" checked onchange="toggleFrequenciaOptions()"> 🔄 Diário (Todos os dias)
+                        </label>
+                        <label style="cursor: pointer; font-weight: normal; font-size: 0.9rem; display: flex; align-items: center; gap: 6px;">
+                            <input type="radio" name="frequencia" value="semanal" onchange="toggleFrequenciaOptions()"> 📅 Dias da Semana
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group" id="dias_semana_group" style="display: none; margin-top: 10px; background-color: var(--light-bg); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color);">
+                    <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-gray); margin-bottom: 8px; display: block;">Selecione os dias da semana:</label>
+                    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" value="0"> Seg</label>
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" value="1"> Ter</label>
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" value="2"> Qua</label>
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" value="3"> Qui</label>
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" value="4"> Sex</label>
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" value="5"> Sáb</label>
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" value="6"> Dom</label>
+                    </div>
+                </div>
+
                 <div class="form-group">
-                    <label for="hora_execucao">Hora da Execução Diária</label>
+                    <label for="hora_execucao">Hora da Execução</label>
                     <input type="time" name="hora_execucao" id="hora_execucao" class="form-control" required>
                 </div>
 
@@ -239,6 +297,45 @@
         </div>
     </div>
 
+    <!-- Modal de Edição de Frequência -->
+    <div id="editFrequenciaModal" class="modal" style="display: none;">
+        <div class="modal-content card" style="max-width: 480px;">
+            <span class="close" onclick="closeEditFrequenciaModal()"
+                style="color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
+            <h3 style="margin-top:0; color: var(--primary-blue);">Editar Frequência do Comando</h3>
+            <p style="color: var(--text-gray); margin-bottom: 20px;">Altere a frequência de disparo da recorrência #<span id="editFrequenciaRecurrentId"></span>.</p>
+
+            <form id="editFrequenciaForm" method="POST" action="">
+                <div class="form-group" style="margin-top: 15px;">
+                    <label style="font-weight: 600; font-size: 0.9rem;">Frequência de Disparo</label>
+                    <div style="display: flex; gap: 20px; margin-top: 5px;">
+                        <label style="cursor: pointer; font-weight: normal; font-size: 0.9rem; display: flex; align-items: center; gap: 6px;">
+                            <input type="radio" name="frequencia" id="edit_freq_diario" value="diario" onchange="toggleEditFrequenciaOptions()"> 🔄 Diário (Todos os dias)
+                        </label>
+                        <label style="cursor: pointer; font-weight: normal; font-size: 0.9rem; display: flex; align-items: center; gap: 6px;">
+                            <input type="radio" name="frequencia" id="edit_freq_semanal" value="semanal" onchange="toggleEditFrequenciaOptions()"> 📅 Dias da Semana
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group" id="edit_dias_semana_group" style="display: none; margin-top: 10px; background-color: var(--light-bg); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color);">
+                    <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-gray); margin-bottom: 8px; display: block;">Selecione os dias da semana:</label>
+                    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" class="edit-dia-chk" value="0"> Seg</label>
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" class="edit-dia-chk" value="1"> Ter</label>
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" class="edit-dia-chk" value="2"> Qua</label>
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" class="edit-dia-chk" value="3"> Qui</label>
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" class="edit-dia-chk" value="4"> Sex</label>
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" class="edit-dia-chk" value="5"> Sáb</label>
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" class="edit-dia-chk" value="6"> Dom</label>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="margin-top: 20px; width: 100%;">Salvar Frequência</button>
+            </form>
+        </div>
+    </div>
+
     <script>
         function openCreateModal() {
             document.getElementById('createRecurrentModal').style.display = 'block';
@@ -272,6 +369,23 @@
                 emailGroup.style.display = 'none';
             }
         }
+
+        function toggleFrequenciaOptions() {
+            var radios = document.getElementsByName('frequencia');
+            var selectedVal = 'diario';
+            for (var i = 0; i < radios.length; i++) {
+                if (radios[i].checked) {
+                    selectedVal = radios[i].value;
+                    break;
+                }
+            }
+            var group = document.getElementById('dias_semana_group');
+            if (selectedVal === 'semanal') {
+                group.style.display = 'block';
+            } else {
+                group.style.display = 'none';
+            }
+        }
         
         function openEditEmailsModal(id, emails_destino) {
             document.getElementById('editEmailsRecurrentId').innerText = id;
@@ -284,11 +398,42 @@
             document.getElementById('editEmailsModal').style.display = 'none';
         }
 
+        function openEditFrequenciaModal(id, frequencia, dias_semana) {
+            document.getElementById('editFrequenciaRecurrentId').innerText = id;
+            document.getElementById('editFrequenciaForm').action = "/admin/comandos_recorrentes/editar_frequencia/" + id;
+            
+            if (frequencia === 'semanal') {
+                document.getElementById('edit_freq_semanal').checked = true;
+                document.getElementById('edit_dias_semana_group').style.display = 'block';
+            } else {
+                document.getElementById('edit_freq_diario').checked = true;
+                document.getElementById('edit_dias_semana_group').style.display = 'none';
+            }
+            
+            var diasArray = dias_semana ? dias_semana.split(',') : [];
+            var chks = document.querySelectorAll('.edit-dia-chk');
+            chks.forEach(function(chk) {
+                chk.checked = diasArray.includes(chk.value);
+            });
+            
+            document.getElementById('editFrequenciaModal').style.display = 'block';
+        }
+
+        function closeEditFrequenciaModal() {
+            document.getElementById('editFrequenciaModal').style.display = 'none';
+        }
+
+        function toggleEditFrequenciaOptions() {
+            var isSemanal = document.getElementById('edit_freq_semanal').checked;
+            document.getElementById('edit_dias_semana_group').style.display = isSemanal ? 'block' : 'none';
+        }
+
         // Close when clicking outside of the modal content
         window.onclick = function (event) {
             var modal = document.getElementById('createRecurrentModal');
             var deleteModal = document.getElementById('deleteConfirmModal');
             var editEmailsModal = document.getElementById('editEmailsModal');
+            var editFrequenciaModal = document.getElementById('editFrequenciaModal');
             if (event.target == modal) {
                 closeCreateModal();
             }
@@ -297,6 +442,9 @@
             }
             if (event.target == editEmailsModal) {
                 closeEditEmailsModal();
+            }
+            if (event.target == editFrequenciaModal) {
+                closeEditFrequenciaModal();
             }
         }
     </script>
