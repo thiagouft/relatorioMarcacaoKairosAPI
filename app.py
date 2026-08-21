@@ -1411,6 +1411,26 @@ def get_appointments():
             # Bulk fetch all employees
             employees_info = fetch_all_employees_map()
                 
+        start_time_str = data.get('start_time')
+        end_time_str = data.get('end_time')
+
+        start_time_obj = None
+        end_time_obj = None
+
+        if start_time_str and start_time_str.strip():
+            try:
+                st_h, st_m = map(int, start_time_str.strip().split(':'))
+                start_time_obj = datetime.time(st_h, st_m)
+            except ValueError:
+                pass
+
+        if end_time_str and end_time_str.strip():
+            try:
+                et_h, et_m = map(int, end_time_str.strip().split(':'))
+                end_time_obj = datetime.time(et_h, et_m)
+            except ValueError:
+                pass
+
         # Process records for display
         processed_data = []
         for r in all_records:
@@ -1427,6 +1447,16 @@ def get_appointments():
             # Apply location filter
             if selected_location and selected_location.strip() and selected_location != 'Todos':
                 if local != selected_location:
+                    continue
+
+            # Apply time filter
+            rec_hora = r.get('Hora')
+            rec_minuto = r.get('Minuto')
+            if rec_hora is not None and rec_minuto is not None:
+                rec_time = datetime.time(rec_hora, rec_minuto)
+                if start_time_obj and rec_time < start_time_obj:
+                    continue
+                if end_time_obj and rec_time > end_time_obj:
                     continue
 
             processed_data.append({

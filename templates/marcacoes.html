@@ -35,6 +35,14 @@
                     <input type="date" id="end_date" class="form-control" max="2099-12-31" min="2000-01-01" value="{{ current_date }}">
                 </div>
                 <div class="filter-group">
+                    <label for="start_time">Hora Início (Opcional)</label>
+                    <input type="time" id="start_time" class="form-control">
+                </div>
+                <div class="filter-group">
+                    <label for="end_time">Hora Fim (Opcional)</label>
+                    <input type="time" id="end_time" class="form-control">
+                </div>
+                <div class="filter-group">
                     <label for="local">Local</label>
                     <select id="local" class="form-control">
                         <option value="Todos">Todos</option>
@@ -198,6 +206,8 @@
         document.getElementById('btn-search').addEventListener('click', async () => {
             const startDateInput = document.getElementById('start_date').value;
             const endDateInput = document.getElementById('end_date').value;
+            const startTimeInput = document.getElementById('start_time').value;
+            const endTimeInput = document.getElementById('end_time').value;
             const matriculaInput = document.getElementById('matricula').value;
             const localInput = document.getElementById('local').value;
             const errorMsg = document.getElementById('error-msg');
@@ -209,6 +219,12 @@
 
             if (!startDateInput || !endDateInput) {
                 errorMsg.textContent = 'Por favor, selecione as datas de início e fim.';
+                errorMsg.style.display = 'block';
+                return;
+            }
+
+            if (startTimeInput && endTimeInput && startTimeInput > endTimeInput) {
+                errorMsg.textContent = 'A hora de início não pode ser maior que a hora de fim.';
                 errorMsg.style.display = 'block';
                 return;
             }
@@ -226,7 +242,9 @@
                 start_date: formatDate(startDateInput),
                 end_date: formatDate(endDateInput),
                 matricula: matriculaInput,
-                local: localInput
+                local: localInput,
+                start_time: startTimeInput,
+                end_time: endTimeInput
             };
 
             loading.style.display = 'block';
