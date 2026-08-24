@@ -683,6 +683,46 @@ def editar_frequencia_comando_recorrente(id):
         
     return redirect(url_for('comandos_recorrentes'))
 
+@app.route('/admin/comandos_recorrentes/editar/<int:id>', methods=['POST'])
+@login_required
+@permission_required('envio_comando')
+def editar_comando_recorrente(id):
+    try:
+        hora_execucao = request.form.get('hora_execucao')
+        frequencia = request.form.get('frequencia', 'diario')
+        dias_semana_list = request.form.getlist('dias_semana')
+        dias_semana_str = ",".join(dias_semana_list) if (frequencia == 'semanal' and dias_semana_list) else None
+        enviar_email = 'enviar_email' in request.form
+        emails_destino = request.form.get('emails_destino', '').strip() if enviar_email else None
+        
+        if not hora_execucao:
+            flash('Informe a hora da execução.', 'danger')
+            return redirect(url_for('comandos_recorrentes'))
+            
+        if frequencia == 'semanal' and not dias_semana_str:
+            flash('Selecione pelo menos um dia da semana para a recorrência semanal.', 'danger')
+            return redirect(url_for('comandos_recorrentes'))
+
+        db = get_db_session()
+        comando = db.query(ComandoRecorrente).get(id)
+        if comando:
+            comando.hora_execucao = hora_execucao
+            comando.frequencia = frequencia
+            comando.dias_semana = dias_semana_str
+            comando.enviar_email = enviar_email
+            comando.emails_destino = emails_destino
+            db.commit()
+            log_action(f"Atualizou comando recorrente #{id} (Hora: {hora_execucao}, Freq: {frequencia}, Email: {enviar_email})")
+            flash(f'Comando recorrente #{id} atualizado com sucesso!', 'success')
+        else:
+            flash('Comando recorrente não encontrado.', 'danger')
+        db.close()
+    except Exception as e:
+        flash(f'Erro ao atualizar comando recorrente: {str(e)}', 'danger')
+        
+    return redirect(url_for('comandos_recorrentes'))
+
+
 @app.route('/admin/comandos_recorrentes/executar/<int:id>', methods=['POST'])
 @login_required
 @permission_required('envio_comando')

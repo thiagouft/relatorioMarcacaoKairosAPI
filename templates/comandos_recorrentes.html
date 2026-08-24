@@ -97,7 +97,7 @@
                                             🔄 Diário
                                         </span>
                                     {% endif %}
-                                    <button type="button" title="Editar Frequência" onclick="openEditFrequenciaModal({{ cmd.id }}, '{{ cmd.frequencia or 'diario' }}', '{{ cmd.dias_semana or '' }}')"
+                                    <button type="button" title="Editar Comando Recorrente" onclick="openEditRecurrentModal({{ cmd.id }}, '{{ cmd.hora_execucao }}', '{{ cmd.frequencia or 'diario' }}', '{{ cmd.dias_semana or '' }}', {{ 'true' if cmd.enviar_email else 'false' }}, '{{ cmd.emails_destino or '' }}')"
                                         style="background: none; border: none; font-size: 1rem; cursor: pointer; padding: 2px; line-height: 1; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">
                                         ✏️
                                     </button>
@@ -130,7 +130,7 @@
                                             <span>📧 Sim</span>
                                             <span style="font-size: 0.72rem; background: #2e7d32; color: white; border-radius: 8px; padding: 1px 6px; font-weight: 500;">Desativar</span>
                                         </button>
-                                        <button type="button" title="Editar E-mails de Destino" onclick="openEditEmailsModal({{ cmd.id }}, '{{ cmd.emails_destino or '' }}')"
+                                        <button type="button" title="Editar Comando Recorrente" onclick="openEditRecurrentModal({{ cmd.id }}, '{{ cmd.hora_execucao }}', '{{ cmd.frequencia or 'diario' }}', '{{ cmd.dias_semana or '' }}', {{ 'true' if cmd.enviar_email else 'false' }}, '{{ cmd.emails_destino or '' }}')"
                                             style="background: none; border: none; font-size: 1.1rem; cursor: pointer; padding: 2px; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
                                             ✏️
                                         </button>
@@ -153,6 +153,12 @@
                                             ▶️
                                         </button>
                                     </form>
+                                    <button type="button" class="btn btn-warning" title="Editar comando recorrente (Horário, Frequência e E-mail)"
+                                        onclick="openEditRecurrentModal({{ cmd.id }}, '{{ cmd.hora_execucao }}', '{{ cmd.frequencia or 'diario' }}', '{{ cmd.dias_semana or '' }}', {{ 'true' if cmd.enviar_email else 'false' }}, '{{ cmd.emails_destino or '' }}')"
+                                        style="width: 34px; height: 34px; padding: 0; border-radius: 6px; background-color: #f59e0b; color: white; border: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 0.95rem; transition: all 0.2s;"
+                                        onmouseover="this.style.transform='scale(1.1)'" onmouseout="this.style.transform='scale(1)'">
+                                        ✏️
+                                    </button>
                                     <form method="POST" action="{{ url_for('excluir_comando_recorrente', id=cmd.id) }}"
                                         onsubmit="confirmExclusao(event, this)"
                                         style="display: inline;">
@@ -336,6 +342,60 @@
         </div>
     </div>
 
+    <!-- Modal de Edição Unificada de Comando Recorrente -->
+    <div id="editRecurrentModal" class="modal" style="display: none;">
+        <div class="modal-content card" style="max-width: 480px;">
+            <span class="close" onclick="closeEditRecurrentModal()"
+                style="color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer;">&times;</span>
+            <h3 style="margin-top:0; color: var(--primary-blue);">Editar Comando Recorrente</h3>
+            <p style="color: var(--text-gray); margin-bottom: 20px;">Altere as configurações da recorrência #<span id="editRecurrentId"></span>.</p>
+
+            <form id="editRecurrentForm" method="POST" action="">
+                <div class="form-group">
+                    <label for="edit_hora_execucao" style="font-weight: 600; font-size: 0.9rem;">Hora da Execução</label>
+                    <input type="time" name="hora_execucao" id="edit_hora_execucao" class="form-control" required style="width: 100%; height: 38px; border-radius: 4px; border: 1px solid var(--border-color); padding: 5px 10px;">
+                </div>
+
+                <div class="form-group" style="margin-top: 15px;">
+                    <label style="font-weight: 600; font-size: 0.9rem;">Frequência de Disparo</label>
+                    <div style="display: flex; gap: 20px; margin-top: 5px;">
+                        <label style="cursor: pointer; font-weight: normal; font-size: 0.9rem; display: flex; align-items: center; gap: 6px;">
+                            <input type="radio" name="frequencia" id="edit_unified_freq_diario" value="diario" onchange="toggleEditUnifiedFrequenciaOptions()"> 🔄 Diário (Todos os dias)
+                        </label>
+                        <label style="cursor: pointer; font-weight: normal; font-size: 0.9rem; display: flex; align-items: center; gap: 6px;">
+                            <input type="radio" name="frequencia" id="edit_unified_freq_semanal" value="semanal" onchange="toggleEditUnifiedFrequenciaOptions()"> 📅 Dias da Semana
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group" id="edit_unified_dias_semana_group" style="display: none; margin-top: 10px; background-color: var(--light-bg); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color);">
+                    <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-gray); margin-bottom: 8px; display: block;">Selecione os dias da semana:</label>
+                    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" class="edit-unified-dia-chk" value="0"> Seg</label>
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" class="edit-unified-dia-chk" value="1"> Ter</label>
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" class="edit-unified-dia-chk" value="2"> Qua</label>
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" class="edit-unified-dia-chk" value="3"> Qui</label>
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" class="edit-unified-dia-chk" value="4"> Sex</label>
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" class="edit-unified-dia-chk" value="5"> Sáb</label>
+                        <label style="font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="checkbox" name="dias_semana" class="edit-unified-dia-chk" value="6"> Dom</label>
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top: 15px; display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" name="enviar_email" id="edit_unified_enviar_email" onchange="toggleEditUnifiedEmailInput()" style="width: 18px; height: 18px; cursor: pointer;">
+                    <label for="edit_unified_enviar_email" style="margin: 0; cursor: pointer; font-weight: normal; color: var(--text-gray);">Enviar log por e-mail após a execução</label>
+                </div>
+                
+                <div class="form-group" id="edit_unified_email_input_group" style="display: none; margin-top: 10px;">
+                    <label for="edit_unified_emails_destino" style="font-size: 0.9rem;">E-mails de Destino <small style="font-weight:normal; color:#888;">(separe com vírgula)</small></label>
+                    <input type="text" name="emails_destino" id="edit_unified_emails_destino" class="form-control" placeholder="exemplo1@mail.com, exemplo2@mail.com">
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="margin-top: 20px; width: 100%;">Salvar Alterações</button>
+            </form>
+        </div>
+    </div>
+
     <script>
         function openCreateModal() {
             document.getElementById('createRecurrentModal').style.display = 'block';
@@ -428,12 +488,54 @@
             document.getElementById('edit_dias_semana_group').style.display = isSemanal ? 'block' : 'none';
         }
 
+        function openEditRecurrentModal(id, hora_execucao, frequencia, dias_semana, enviar_email, emails_destino) {
+            document.getElementById('editRecurrentId').innerText = id;
+            document.getElementById('editRecurrentForm').action = "/admin/comandos_recorrentes/editar/" + id;
+            document.getElementById('edit_hora_execucao').value = hora_execucao || '';
+            
+            if (frequencia === 'semanal') {
+                document.getElementById('edit_unified_freq_semanal').checked = true;
+                document.getElementById('edit_unified_dias_semana_group').style.display = 'block';
+            } else {
+                document.getElementById('edit_unified_freq_diario').checked = true;
+                document.getElementById('edit_unified_dias_semana_group').style.display = 'none';
+            }
+            
+            var diasArray = dias_semana ? dias_semana.split(',') : [];
+            var chks = document.querySelectorAll('.edit-unified-dia-chk');
+            chks.forEach(function(chk) {
+                chk.checked = diasArray.includes(chk.value);
+            });
+            
+            var emailChk = document.getElementById('edit_unified_enviar_email');
+            emailChk.checked = Boolean(enviar_email);
+            document.getElementById('edit_unified_email_input_group').style.display = emailChk.checked ? 'block' : 'none';
+            document.getElementById('edit_unified_emails_destino').value = emails_destino || '';
+            
+            document.getElementById('editRecurrentModal').style.display = 'block';
+        }
+
+        function closeEditRecurrentModal() {
+            document.getElementById('editRecurrentModal').style.display = 'none';
+        }
+
+        function toggleEditUnifiedFrequenciaOptions() {
+            var isSemanal = document.getElementById('edit_unified_freq_semanal').checked;
+            document.getElementById('edit_unified_dias_semana_group').style.display = isSemanal ? 'block' : 'none';
+        }
+
+        function toggleEditUnifiedEmailInput() {
+            var emailChk = document.getElementById('edit_unified_enviar_email');
+            document.getElementById('edit_unified_email_input_group').style.display = emailChk.checked ? 'block' : 'none';
+        }
+
         // Close when clicking outside of the modal content
         window.onclick = function (event) {
             var modal = document.getElementById('createRecurrentModal');
             var deleteModal = document.getElementById('deleteConfirmModal');
             var editEmailsModal = document.getElementById('editEmailsModal');
             var editFrequenciaModal = document.getElementById('editFrequenciaModal');
+            var editRecurrentModal = document.getElementById('editRecurrentModal');
             if (event.target == modal) {
                 closeCreateModal();
             }
@@ -446,8 +548,12 @@
             if (event.target == editFrequenciaModal) {
                 closeEditFrequenciaModal();
             }
+            if (event.target == editRecurrentModal) {
+                closeEditRecurrentModal();
+            }
         }
     </script>
 </body>
 
 </html>
+
