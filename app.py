@@ -46,8 +46,8 @@ TIMEOUT = 60
 CLOCK_GROUPS = {
     "P10": [1, 11, 23, 29],
     "COCA": [3, 14, 31],
-    "CANTEIRO III": [18, 22, 24, 25],
-    "PIPE MARABA": [5, 9, 20],
+    "CANTEIRO III": [18, 22, 24],
+    "PIPE MARABA": [5, 9, 20, 25],
     "OFICINA II": [8],
     "P1": [2, 4, 10, 19, 21, 28],
     "TREINAMENTO": [16],
@@ -1311,8 +1311,8 @@ def fetch_all_employees_map():
 CLOCK_GROUPS = {
   "P10": [1, 11, 23,29],
   "COCA": [3, 14, 31],
-  "CANTEIRO III": [18, 22, 24, 25],
-  "PIPE MARABA": [5, 9, 20],
+  "CANTEIRO III": [18, 22, 24],
+  "PIPE MARABA": [5, 9, 20, 25],
   "OFICINA II": [8],
   "P1": [2, 4, 10, 19, 21, 28],
   "TREINAMENTO": [16],
