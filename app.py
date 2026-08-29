@@ -981,18 +981,18 @@ def api_intersticio():
             # Check if threshold is exceeded
             exceeded = False
             if turno == 'A':
-                # Turno A threshold is 19:50
-                if p_hour > 19 or (p_hour == 19 and p_minute >= 50):
+                # Turno A threshold is 19:51
+                if p_hour > 19 or (p_hour == 19 and p_minute >= 51):
                     exceeded = True
             else:
                 # Turno B:
-                # Monday to Thursday (weekday index 0 to 3): >= 05:50
-                # Friday, Saturday, Sunday (weekday index 4 to 6): >= 04:50
+                # Monday to Thursday (weekday index 0 to 3): >= 05:51
+                # Friday, Saturday, Sunday (weekday index 4 to 6): >= 04:51
                 if day_of_week in [0, 1, 2, 3]: # Monday to Thursday
-                    if p_hour > 5 or (p_hour == 5 and p_minute >= 50):
+                    if p_hour > 5 or (p_hour == 5 and p_minute >= 51):
                         exceeded = True
                 else: # Friday, Saturday, Sunday
-                    if p_hour > 4 or (p_hour == 4 and p_minute >= 50):
+                    if p_hour > 4 or (p_hour == 4 and p_minute >= 51):
                         exceeded = True
                         
             if exceeded:
