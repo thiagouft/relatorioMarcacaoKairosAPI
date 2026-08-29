@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, text, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, text, ForeignKey, Text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from werkzeug.security import generate_password_hash
 import datetime
@@ -101,10 +101,10 @@ class AgendamentoComando(Base):
     usuario = Column(String(100), nullable=True)
     data_hora_execucao = Column(DateTime, nullable=False)
     comandos = Column(String(1000), nullable=False)
-    matriculas = Column(String(8000), nullable=False)
+    matriculas = Column(Text, nullable=False)
     relogios = Column(String(1000), nullable=False)
     status = Column(String(50), default='Pendente')
-    resultado = Column(String(8000), nullable=True)
+    resultado = Column(Text, nullable=True)
     sucesso_file = Column(String(500), nullable=True)
     falha_file = Column(String(500), nullable=True)
     observacao = Column(String(500), nullable=True)

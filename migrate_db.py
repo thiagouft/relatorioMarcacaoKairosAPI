@@ -14,6 +14,17 @@ def upgrade_database_schema():
     Base.metadata.create_all(engine)
     print("Verificação de novas tabelas (como 'logs') concluída.")
     
+    # Alteração das colunas matriculas e resultado para VARCHAR(MAX) se necessário
+    print("Ajustando tamanho das colunas 'matriculas' e 'resultado' na tabela 'agendamento_comandos'...")
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE agendamento_comandos ALTER COLUMN matriculas VARCHAR(MAX) NOT NULL"))
+            conn.execute(text("ALTER TABLE agendamento_comandos ALTER COLUMN resultado VARCHAR(MAX) NULL"))
+            conn.commit()
+            print("[Sucesso] Colunas 'matriculas' e 'resultado' alteradas para VARCHAR(MAX).")
+        except Exception as e:
+            print(f"[Erro] Falha ao ajustar tipo das colunas 'matriculas' e 'resultado': {e}")
+    
     # Carga de dados iniciais do CPRT
     from db_setup import seed_initial_data
     from sqlalchemy.orm import sessionmaker
