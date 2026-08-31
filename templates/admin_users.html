@@ -99,6 +99,10 @@
                             <input type="checkbox" id="perm_admin_users" name="admin_users">
                             Usuários
                         </label>
+                        <label>
+                            <input type="checkbox" id="perm_mapeamento_relogios" name="mapeamento_relogios">
+                            Mapeamento de Relógios
+                        </label>
                     </div>
                 </div>
                 
@@ -227,6 +231,7 @@
             // Set checkboxes based on existing permissions
             document.getElementById('perm_is_admin').checked = isAdmin === true;
             document.getElementById('perm_admin_users').checked = permissions.admin_users === true;
+            document.getElementById('perm_mapeamento_relogios').checked = permissions.mapeamento_relogios === true;
             document.getElementById('perm_admin_locais_ponto').checked = permissions.admin_locais_ponto === true;
             document.getElementById('perm_envio_comando').checked = permissions.envio_comando === true;
             document.getElementById('perm_hora_extra_acumulada').checked = permissions.hora_extra_acumulada === true;

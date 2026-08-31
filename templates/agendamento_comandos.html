@@ -110,22 +110,7 @@
 
     <!-- Pass grouping definition to frontend via global window variable -->
     <script>
-        window.gruposRelogios = {
-            "P10": [1, 11, 23, 29],
-            "COCA": [3, 14, 31],
-            "CANTEIRO III": [18, 22, 24],
-            "PIPE MARABA": [5, 9, 20, 25],
-            "OFICINA II": [8],
-            "P1 PIPE SFX": [2, 4, 10, 19, 21, 28],
-            "TREINAMENTO": [16],
-            "MUTRAN CANTEIRO IV": [13, 17],
-            "TERRAPLENAGEM III": [6, 12],
-            "TENDA MOTORISTAS III": [26],
-            "NAUTICA": [30],
-            "PI SAO FELIX": [33, 34],
-            "CENTRAL DE CONCRETO III": [7, 15],
-            "P12": [27, 32]
-        };
+        window.gruposRelogios = {{ (grupos_relogios if grupos_relogios is defined else {}) | tojson }};
     </script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {

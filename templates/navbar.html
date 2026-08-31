@@ -76,12 +76,17 @@
                 <a href="{{ url_for('intersticio') }}" {% if active_page == 'intersticio' %}style="font-weight: bold; border-bottom: 2px solid var(--accent-color);"{% endif %}>Interstício</a>
                 {% endif %}
 
-                <!-- 5. Definições (dropdown com Usuários) -->
-                {% if is_admin or permissions.admin_users %}
+                <!-- 5. Definições (dropdown com Usuários e Mapeamento de Relógios) -->
+                {% if is_admin or permissions.admin_users or permissions.mapeamento_relogios %}
                 <div class="dropdown">
-                    <button class="dropbtn" {% if active_page == 'admin_users' %}style="font-weight: bold; border-bottom: 2px solid var(--accent-color);"{% endif %}>Definições</button>
+                    <button class="dropbtn" {% if active_page in ['admin_users', 'mapeamento_relogios'] %}style="font-weight: bold; border-bottom: 2px solid var(--accent-color);"{% endif %}>Definições</button>
                     <div class="dropdown-content">
+                        {% if is_admin or permissions.admin_users %}
                         <a href="{{ url_for('admin_users') }}">Usuários</a>
+                        {% endif %}
+                        {% if is_admin or permissions.mapeamento_relogios %}
+                        <a href="{{ url_for('mapeamento_relogios') }}">Mapeamento de Relógios</a>
+                        {% endif %}
                     </div>
                 </div>
                 {% endif %}

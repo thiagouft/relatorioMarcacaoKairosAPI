@@ -11,7 +11,7 @@ import threading
 import time
 from functools import wraps
 from config import Config, get_local_now, fix_utf8_mojibake
-from db_setup import User, Log, Base, Horario, Secao, Gerencia, GerenciaSecao, Situacao, Pessoa, AgendamentoComando, ComandoRecorrente, Setting
+from db_setup import User, Log, Base, Horario, Secao, Gerencia, GerenciaSecao, Situacao, Pessoa, AgendamentoComando, ComandoRecorrente, Setting, RelogioGrupo, INITIAL_CLOCK_GROUPS
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -43,29 +43,48 @@ app.config.from_object(Config)
 # Tempo limite para requisições à API externa do Kairos
 TIMEOUT = 60
 
-CLOCK_GROUPS = {
-    "P10": [1, 11, 23, 29],
-    "COCA": [3, 14, 31],
-    "CANTEIRO III": [18, 22, 24],
-    "PIPE MARABA": [5, 9, 20, 25],
-    "OFICINA II": [8],
-    "P1 PIPE SFX": [2, 4, 10, 19, 21, 28],
-    "TREINAMENTO": [16],
-    "MUTRAN CANTEIRO IV": [13, 17],
-    "TERRAPLENAGEM III": [6, 12],
-    "TENDA MOTORISTAS III": [26],
-    "NAUTICA": [30],
-    "PI SAO FELIX": [33, 34, 35, 36],
-    "CENTRAL DE CONCRETO III": [7, 15],
-    "P12": [27, 32]
-}
-
 # Database Setup
 engine = create_engine(app.config['SQLALCHEMY_DATABASE_URI'])
 Session = sessionmaker(bind=engine)
 
 def get_db_session():
     return Session()
+
+def get_clock_groups(for_records=False):
+    """
+    Retorna o mapeamento dinâmico de grupos e seus respectivos IDs de relógios.
+    Se for_records=True (para consultas de marcações/locais de ponto em app.py),
+    preserva a particularidade histórica do grupo 'PI SAO FELIX' contendo também [35, 36].
+    """
+    db = get_db_session()
+    try:
+        grupos_db = db.query(RelogioGrupo).order_by(RelogioGrupo.id.asc()).all()
+        if grupos_db:
+            grupos = {}
+            for g in grupos_db:
+                try:
+                    ids = json.loads(g.relogios)
+                    if isinstance(ids, list):
+                        ids = [int(x) for x in ids if str(x).isdigit() or isinstance(x, int)]
+                    else:
+                        ids = []
+                except Exception:
+                    ids = []
+                grupos[g.nome] = ids
+        else:
+            grupos = {k: list(v) for k, v in INITIAL_CLOCK_GROUPS.items()}
+    except Exception as e:
+        print(f"Erro ao buscar grupos de relógios do DB: {e}")
+        grupos = {k: list(v) for k, v in INITIAL_CLOCK_GROUPS.items()}
+    finally:
+        db.close()
+
+    if for_records and "PI SAO FELIX" in grupos:
+        # Particularidade de PI SAO FELIX no backend para apuração de marcações/locais de ponto
+        extra_ids = [35, 36]
+        grupos["PI SAO FELIX"] = sorted(list(set(grupos["PI SAO FELIX"] + extra_ids)))
+
+    return grupos
 
 # Login Decorator
 def login_required(f):
@@ -361,6 +380,7 @@ def get_menu_permissions():
         # Admins have all permissions
         return {
             "admin_users": True,
+            "mapeamento_relogios": True,
             "admin_locais_ponto": True,
             "envio_comando": True,
             "hora_extra_acumulada": True,
@@ -386,7 +406,7 @@ def home():
 @login_required
 def marcacoes():
     log_action('Acessou menu Marcações')
-    locations = sorted(CLOCK_GROUPS.keys())
+    locations = sorted(get_clock_groups().keys())
     permissions = get_menu_permissions()
     current_date = get_local_now().strftime('%Y-%m-%d')
     return render_template(
@@ -403,10 +423,13 @@ def marcacoes():
 @permission_required('admin_users')
 def create_user():
     email = request.form['email']
-    full_name = request.form['full_name']
-    username = request.form['username']
+    username = request.form.get('username')
+    full_name = request.form.get('full_name')
     password = request.form['password']
     is_admin = 'is_admin' in request.form
+
+    if not username:
+        username = email.split('@')[0]
     
     db = get_db_session()
     
@@ -444,6 +467,7 @@ def create_user():
 def update_permissions(user_id):
     permissions = {
         'admin_users': 'admin_users' in request.form,
+        'mapeamento_relogios': 'mapeamento_relogios' in request.form,
         'admin_locais_ponto': 'admin_locais_ponto' in request.form,
         'envio_comando': 'envio_comando' in request.form,
         'hora_extra_acumulada': 'hora_extra_acumulada' in request.form,
@@ -474,23 +498,23 @@ def reset_password():
     user = db.query(User).filter_by(username=username).first()
     
     if not user:
-        flash('Login não encontrado.', 'danger')
+        flash('Usuário não encontrado.', 'danger')
         db.close()
-        return redirect(url_for('home'))
+        return redirect(url_for('admin_users'))
     
     user.password_hash = generate_password_hash(new_password)
     user.must_change_password = True
     db.commit()
     db.close()
     
-    log_action(f'Resetou senha do login: {username}')
-    flash(f'Senha de {username} alterada com sucesso.', 'success')
+    log_action(f'Resetou a senha para o usuário: {username}')
+    flash(f'Senha para {username} resetada com sucesso.', 'success')
     return redirect(url_for('admin_users'))
 
 @app.route('/admin/users')
 @permission_required('admin_users')
 def admin_users():
-    log_action('Acessou menu de Gestão de Usuários')
+    log_action('Acessou menu de Usuários')
     db = get_db_session()
     users = db.query(User).all()
     db.close()
@@ -504,6 +528,210 @@ def admin_users():
             user_permissions[user.id] = {}
     return render_template('admin_users.html', users=users, is_admin=session.get('is_admin'), permissions=permissions, user_permissions=user_permissions)
 
+@app.route('/admin/mapeamento_relogios')
+@app.route('/mapeamento_relogios')
+@permission_required('mapeamento_relogios')
+def mapeamento_relogios():
+    log_action('Acessou menu de Mapeamento de Relógios')
+    permissions = get_menu_permissions()
+    return render_template('mapeamento_relogios.html', is_admin=session.get('is_admin'), permissions=permissions)
+
+@app.route('/api/mapeamento_relogios/dados', methods=['GET'])
+@permission_required('mapeamento_relogios')
+def api_mapeamento_relogios_dados():
+    db = get_db_session()
+    try:
+        # Busca relógios direto da API do Kairos (SearchClocks)
+        relogios_kairos = fetch_clocks()
+
+        # Busca grupos cadastrados no banco
+        grupos_db = db.query(RelogioGrupo).order_by(RelogioGrupo.id.asc()).all()
+
+        grupos_list = []
+        for g in grupos_db:
+            try:
+                ids = json.loads(g.relogios)
+                if isinstance(ids, list):
+                    ids = [int(x) for x in ids if str(x).isdigit() or isinstance(x, int)]
+                else:
+                    ids = []
+            except Exception:
+                ids = []
+            grupos_list.append({
+                'id': g.id,
+                'nome': g.nome,
+                'relogios': ids
+            })
+
+        return jsonify({
+            'sucesso': True,
+            'grupos': grupos_list,
+            'relogios_kairos': relogios_kairos
+        })
+    except Exception as e:
+        return jsonify({'sucesso': False, 'mensagem': f'Erro ao carregar dados: {str(e)}'}), 500
+    finally:
+        db.close()
+
+@app.route('/api/mapeamento_relogios/salvar_tudo', methods=['POST'])
+@permission_required('mapeamento_relogios')
+def api_mapeamento_relogios_salvar_tudo():
+    try:
+        data = request.json
+        grupos_data = data.get('grupos', [])
+        if not isinstance(grupos_data, list):
+            return jsonify({'sucesso': False, 'mensagem': 'Formato inválido de grupos.'}), 400
+
+        # Obter relógios válidos da API Kairos
+        relogios_kairos = fetch_clocks()
+        valid_clock_ids = set()
+        for r in relogios_kairos:
+            num = r.get('RelogioNumero')
+            if num is not None:
+                valid_clock_ids.add(int(num))
+
+        # Validar relógios
+        for g in grupos_data:
+            nome = str(g.get('nome', '')).strip()
+            if not nome:
+                return jsonify({'sucesso': False, 'mensagem': 'O nome do grupo não pode ficar vazio.'}), 400
+            
+            ids = g.get('relogios', [])
+            for rid in ids:
+                try:
+                    rid_int = int(rid)
+                    if valid_clock_ids and rid_int not in valid_clock_ids:
+                        return jsonify({
+                            'sucesso': False, 
+                            'mensagem': f"O relógio ID {rid_int} não existe na lista oficial do Kairos (SearchClocks) e não pode ser configurado."
+                        }), 400
+                except (ValueError, TypeError):
+                    return jsonify({'sucesso': False, 'mensagem': f"ID de relógio inválido: {rid}"}), 400
+
+        db = get_db_session()
+        try:
+            ids_enviados = [g['id'] for g in grupos_data if g.get('id')]
+            
+            # Deletar grupos que foram removidos
+            if ids_enviados:
+                db.query(RelogioGrupo).filter(~RelogioGrupo.id.in_(ids_enviados)).delete(synchronize_session=False)
+            else:
+                db.query(RelogioGrupo).delete(synchronize_session=False)
+
+            for g in grupos_data:
+                gid = g.get('id')
+                nome = str(g.get('nome', '')).strip()
+                ids = [int(x) for x in g.get('relogios', [])]
+                
+                if gid:
+                    grupo_existente = db.query(RelogioGrupo).get(gid)
+                    if grupo_existente:
+                        grupo_existente.nome = nome
+                        grupo_existente.relogios = json.dumps(ids)
+                        grupo_existente.updated_at = datetime.datetime.utcnow()
+                    else:
+                        novo_g = RelogioGrupo(nome=nome, relogios=json.dumps(ids))
+                        db.add(novo_g)
+                else:
+                    novo_g = RelogioGrupo(nome=nome, relogios=json.dumps(ids))
+                    db.add(novo_g)
+
+            db.commit()
+            log_action('Atualizou o mapeamento de relógios e grupos')
+            return jsonify({'sucesso': True, 'mensagem': 'Mapeamento de relógios salvo com sucesso!'})
+        except Exception as err:
+            db.rollback()
+            return jsonify({'sucesso': False, 'mensagem': f'Erro ao salvar no banco: {str(err)}'}), 500
+        finally:
+            db.close()
+    except Exception as e:
+        return jsonify({'sucesso': False, 'mensagem': f'Erro ao processar: {str(e)}'}), 500
+
+@app.route('/api/mapeamento_relogios/grupo/salvar', methods=['POST'])
+@permission_required('mapeamento_relogios')
+def api_mapeamento_relogios_grupo_salvar():
+    try:
+        data = request.json
+        gid = data.get('id')
+        nome = str(data.get('nome', '')).strip()
+        ids = data.get('relogios', [])
+
+        if not nome:
+            return jsonify({'sucesso': False, 'mensagem': 'Nome do grupo é obrigatório.'}), 400
+
+        # Validar relógios com a API do Kairos
+        relogios_kairos = fetch_clocks()
+        valid_clock_ids = set()
+        for r in relogios_kairos:
+            num = r.get('RelogioNumero')
+            if num is not None:
+                valid_clock_ids.add(int(num))
+
+        ids_limpos = []
+        for rid in ids:
+            try:
+                rid_int = int(rid)
+                if valid_clock_ids and rid_int not in valid_clock_ids:
+                    return jsonify({
+                        'sucesso': False, 
+                        'mensagem': f"O relógio ID {rid_int} não existe no Kairos e não pode ser configurado."
+                    }), 400
+                ids_limpos.append(rid_int)
+            except (ValueError, TypeError):
+                return jsonify({'sucesso': False, 'mensagem': f"ID inválido: {rid}"}), 400
+
+        db = get_db_session()
+        try:
+            if gid:
+                grupo = db.query(RelogioGrupo).get(gid)
+                if not grupo:
+                    return jsonify({'sucesso': False, 'mensagem': 'Grupo não encontrado.'}), 404
+                
+                duplicado = db.query(RelogioGrupo).filter(RelogioGrupo.nome == nome, RelogioGrupo.id != gid).first()
+                if duplicado:
+                    return jsonify({'sucesso': False, 'mensagem': f"Já existe um grupo com o nome '{nome}'."}), 400
+
+                grupo.nome = nome
+                grupo.relogios = json.dumps(ids_limpos)
+                grupo.updated_at = datetime.datetime.utcnow()
+                db.commit()
+                log_action(f"Editou grupo de relógios '{nome}' (#{gid})")
+                return jsonify({'sucesso': True, 'mensagem': f"Grupo '{nome}' atualizado com sucesso!", 'grupo': {'id': grupo.id, 'nome': grupo.nome, 'relogios': ids_limpos}})
+            else:
+                duplicado = db.query(RelogioGrupo).filter_by(nome=nome).first()
+                if duplicado:
+                    return jsonify({'sucesso': False, 'mensagem': f"Já existe um grupo com o nome '{nome}'."}), 400
+
+                novo_grupo = RelogioGrupo(nome=nome, relogios=json.dumps(ids_limpos))
+                db.add(novo_grupo)
+                db.commit()
+                log_action(f"Criou grupo de relógios '{nome}' (#{novo_grupo.id})")
+                return jsonify({'sucesso': True, 'mensagem': f"Grupo '{nome}' criado com sucesso!", 'grupo': {'id': novo_grupo.id, 'nome': novo_grupo.nome, 'relogios': ids_limpos}})
+        finally:
+            db.close()
+    except Exception as e:
+        return jsonify({'sucesso': False, 'mensagem': f'Erro ao salvar grupo: {str(e)}'}), 500
+
+@app.route('/api/mapeamento_relogios/grupo/excluir/<int:grupo_id>', methods=['POST'])
+@permission_required('mapeamento_relogios')
+def api_mapeamento_relogios_grupo_excluir(grupo_id):
+    db = get_db_session()
+    try:
+        grupo = db.query(RelogioGrupo).get(grupo_id)
+        if not grupo:
+            return jsonify({'sucesso': False, 'mensagem': 'Grupo não encontrado.'}), 404
+
+        nome = grupo.nome
+        db.delete(grupo)
+        db.commit()
+        log_action(f"Excluiu grupo de relógios '{nome}' (#{grupo_id})")
+        return jsonify({'sucesso': True, 'mensagem': f"Grupo '{nome}' excluído com sucesso."})
+    except Exception as e:
+        db.rollback()
+        return jsonify({'sucesso': False, 'mensagem': f'Erro ao excluir grupo: {str(e)}'}), 500
+    finally:
+        db.close()
+
 @app.route('/admin/locais_ponto')
 @permission_required('admin_locais_ponto')
 def admin_locais_ponto():
@@ -516,7 +744,7 @@ def admin_locais_ponto():
 def envio_comando():
     log_action('Acessou menu de Envio de Comandos')
     permissions = get_menu_permissions()
-    return render_template('envio_comando.html', is_admin=session.get('is_admin'), permissions=permissions)
+    return render_template('envio_comando.html', is_admin=session.get('is_admin'), permissions=permissions, grupos_relogios=get_clock_groups())
 
 @app.route('/admin/agendamento_comandos')
 @app.route('/agendamento_comandos')
@@ -524,7 +752,7 @@ def envio_comando():
 def agendamento_comandos():
     log_action('Acessou menu de Agendamento de Comandos')
     permissions = get_menu_permissions()
-    return render_template('agendamento_comandos.html', is_admin=session.get('is_admin'), permissions=permissions)
+    return render_template('agendamento_comandos.html', is_admin=session.get('is_admin'), permissions=permissions, grupos_relogios=get_clock_groups())
 
 @app.route('/admin/comandos_agendados')
 @app.route('/comandos_agendados')
@@ -765,7 +993,7 @@ def hora_extra_acumulada():
 @permission_required('exportar_csv')
 def exportar_csv():
     log_action('Acessou menu de Exportação CSV')
-    locations = sorted(CLOCK_GROUPS.keys())
+    locations = sorted(get_clock_groups().keys())
     permissions = get_menu_permissions()
     current_date = get_local_now().strftime('%Y-%m-%d')
     return render_template(
@@ -1173,12 +1401,13 @@ def api_intersticio_desbloquear():
                 
             # Identificar a quais grupos de relógios (locais de ponto) a matrícula pertence
             grupos_associados = []
-            for grupo_nome, grupo_ids in CLOCK_GROUPS.items():
+            clock_groups = get_clock_groups(for_records=True)
+            for grupo_nome, grupo_ids in clock_groups.items():
                 if any(rid in grupo_ids for rid in clock_ids):
                     grupos_associados.append(grupo_nome)
             
             if not grupos_associados:
-                # Caso a matrícula não pertença a nenhum grupo de CLOCK_GROUPS, agrupa pelos relógios específicos dela
+                # Caso a matrícula não pertença a nenhum grupo, agrupa pelos relógios específicos dela
                 key = (liberacao_dt.strftime('%Y-%m-%d %H:%M:%S'), None, tuple(sorted(clock_ids)))
                 if key not in agrupamentos:
                     agrupamentos[key] = []
@@ -1187,7 +1416,7 @@ def api_intersticio_desbloquear():
             else:
                 for grupo_nome in grupos_associados:
                     # Agrupa pelo local de ponto, contendo todos os relógios do grupo
-                    grupo_clock_ids = CLOCK_GROUPS[grupo_nome]
+                    grupo_clock_ids = clock_groups[grupo_nome]
                     key = (liberacao_dt.strftime('%Y-%m-%d %H:%M:%S'), grupo_nome, tuple(sorted(grupo_clock_ids)))
                     if key not in agrupamentos:
                         agrupamentos[key] = []
@@ -1307,30 +1536,13 @@ def fetch_all_employees_map():
         
     return employees_map
 
-# --- Clock Groups Mapping ---
-CLOCK_GROUPS = {
-  "P10": [1, 11, 23,29],
-  "COCA": [3, 14, 31],
-  "CANTEIRO III": [18, 22, 24],
-  "PIPE MARABA": [5, 9, 20, 25],
-  "OFICINA II": [8],
-  "P1 PIPE SFX": [2, 4, 10, 19, 21, 28],
-  "TREINAMENTO": [16],
-  "MUTRAN CANTEIRO IV": [13, 17],
-  "TERRAPLENAGEM III": [6, 12],
-  "TENDA MOTORISTAS III": [26],
-  "NAUTICA": [30],
-  "PI SAO FELIX": [33, 34, 35, 36],
-  "CENTRAL DE CONCRETO III": [7, 15],
-  "P12": [27, 32],
-}
-
 def get_location_by_clock_id(clock_id):
     if clock_id is None:
         return ""
     try:
         cid = int(clock_id)
-        for location, ids in CLOCK_GROUPS.items():
+        clock_groups = get_clock_groups(for_records=True)
+        for location, ids in clock_groups.items():
             if cid in ids:
                 return location
     except (ValueError, TypeError):
@@ -1754,7 +1966,8 @@ def api_admin_locais_ponto():
     except ValueError:
         return jsonify({'error': 'Formato de data inválido'}), 400
 
-    grupo_crachas = {grupo: set() for grupo in CLOCK_GROUPS}
+    clock_groups = get_clock_groups(for_records=True)
+    grupo_crachas = {grupo: set() for grupo in clock_groups}
     crachas_sem_dados = []
     crachas_inexistentes = []
 
@@ -1787,7 +2000,7 @@ def api_admin_locais_ponto():
                         if relogio_id is not None:
                             relogio_ids.add(relogio_id)
                             
-                    for grupo, ids_grupo in CLOCK_GROUPS.items():
+                    for grupo, ids_grupo in clock_groups.items():
                         if any(relogio_id in ids_grupo for relogio_id in relogio_ids):
                             grupo_crachas[grupo].add(cracha)
                             
@@ -1984,7 +2197,8 @@ def execute_recurrent_command(command_id, executed_by_user="Sistema (Recorrente)
                     f_log.write("Consultando API do Kairos...\n\n")
                     f_log.flush()
                     
-                    grupo_crachas = {grupo: set() for grupo in CLOCK_GROUPS}
+                    clock_groups = get_clock_groups(for_records=True)
+                    grupo_crachas = {grupo: set() for grupo in clock_groups}
                     crachas_sem_dados = []
                     crachas_inexistentes = []
                     
@@ -2023,7 +2237,7 @@ def execute_recurrent_command(command_id, executed_by_user="Sistema (Recorrente)
                                             relogio_ids.add(relogio_id)
                                             
                                     grupos_encontrados = []
-                                    for grupo, ids_grupo in CLOCK_GROUPS.items():
+                                    for grupo, ids_grupo in clock_groups.items():
                                         if any(relogio_id in ids_grupo for relogio_id in relogio_ids):
                                             grupo_crachas[grupo].add(cracha)
                                             grupos_encontrados.append(grupo)
@@ -2056,7 +2270,7 @@ def execute_recurrent_command(command_id, executed_by_user="Sistema (Recorrente)
                     agendamentos_criados = 0
                     for grupo, crachas in grupo_crachas.items():
                         if crachas:
-                            clock_ids = CLOCK_GROUPS.get(grupo, [])
+                            clock_ids = clock_groups.get(grupo, [])
                             if clock_ids:
                                 novo_agendamento = AgendamentoComando(
                                     usuario=f"Sistema (Recorrente Desbloqueio #{command.id})",
@@ -2720,7 +2934,8 @@ def api_agendamento_comandos_criar_por_local():
         except ValueError:
             return jsonify({'sucesso': False, 'mensagem': 'Formato de data e hora inválido.'}), 400
 
-        clock_ids = CLOCK_GROUPS.get(location, [])
+        clock_groups = get_clock_groups(for_records=False)
+        clock_ids = clock_groups.get(location, [])
         if not clock_ids:
             return jsonify({'sucesso': False, 'mensagem': f'Local {location} não encontrado nos grupos de relógios.'}), 400
 
@@ -2793,6 +3008,7 @@ def api_agendamento_comandos_listar():
 
         agendamentos = query.all()
         lista = []
+        clock_groups_map = get_clock_groups(for_records=True)
         for a in agendamentos:
             try:
                 cmds_dict = json.loads(a.comandos)
@@ -2814,7 +3030,7 @@ def api_agendamento_comandos_listar():
                 
                 # Mapear locais de ponto correspondentes aos relógios
                 grupos_associados = []
-                for grupo_nome, grupo_ids in CLOCK_GROUPS.items():
+                for grupo_nome, grupo_ids in clock_groups_map.items():
                     if any(rid in grupo_ids for rid in rels):
                         grupos_associados.append(grupo_nome)
                 locais_str = ", ".join(sorted(grupos_associados)) if grupos_associados else "-"
@@ -3170,7 +3386,8 @@ def api_envio_comando_por_local():
         if not location or not crachas:
             return jsonify({'sucesso': False, 'mensagem': 'Local e lista de crachás são obrigatórios.'}), 400
 
-        clock_ids = CLOCK_GROUPS.get(location, [])
+        clock_groups = get_clock_groups(for_records=False)
+        clock_ids = clock_groups.get(location, [])
         if not clock_ids:
             return jsonify({'sucesso': False, 'mensagem': f'Local {location} não encontrado nos grupos de relógios.'}), 400
 
@@ -3223,13 +3440,14 @@ def api_envio_comando_todos_locais():
             'EnviarListaTemplate': True
         }
 
+        clock_groups = get_clock_groups(for_records=False)
         db = get_db_session()
         agendamentos_criados = []
 
         for grupo_nome, crachas in grupos.items():
             if not crachas:
                 continue
-            clock_ids = CLOCK_GROUPS.get(grupo_nome, [])
+            clock_ids = clock_groups.get(grupo_nome, [])
             if not clock_ids:
                 continue
 
@@ -3287,13 +3505,14 @@ def api_agendamento_comandos_criar_todos_locais():
             'EnviarListaTemplate': True
         }
 
+        clock_groups = get_clock_groups(for_records=False)
         db = get_db_session()
         agendamentos_criados = []
 
         for grupo_nome, crachas in grupos.items():
             if not crachas:
                 continue
-            clock_ids = CLOCK_GROUPS.get(grupo_nome, [])
+            clock_ids = clock_groups.get(grupo_nome, [])
             if not clock_ids:
                 continue
 
