@@ -409,10 +409,16 @@ def marcacoes():
     locations = sorted(get_clock_groups().keys())
     permissions = get_menu_permissions()
     current_date = get_local_now().strftime('%Y-%m-%d')
+    db = get_db_session()
+    try:
+        horarios = db.query(Horario).order_by(Horario.codigo).all()
+    finally:
+        db.close()
     return render_template(
         'marcacoes.html',
         is_admin=session.get('is_admin'),
         locations=locations,
+        horarios=horarios,
         permissions=permissions,
         current_date=current_date
     )
@@ -1557,7 +1563,9 @@ def get_appointments():
     data = request.json
     start_date = data.get('start_date')
     end_date = data.get('end_date')
-    selected_location = data.get('local') # Get location filter
+    selected_locations = data.get('locais') # Lista de locais selecionados
+    selected_horarios = data.get('horarios') # Lista de códigos de horários selecionados
+    selected_location = data.get('local') # Fallback para compatibilidade
 
     if not start_date or not end_date:
         return jsonify({'error': 'Datas de início e fim são obrigatórias'}), 400
@@ -1683,6 +1691,28 @@ def get_appointments():
             except ValueError:
                 pass
 
+        # Carregar horários e pessoas do banco local para vinculação e filtro
+        db = get_db_session()
+        try:
+            horarios_db = {h.codigo: h.descricao for h in db.query(Horario).all()}
+            pessoas_db = db.query(Pessoa.chapa, Pessoa.nome, Pessoa.horario_codigo).all()
+        finally:
+            db.close()
+
+        pessoas_by_chapa = {}
+        pessoas_by_nome = {}
+        for p in pessoas_db:
+            if p.chapa:
+                chapa_str = str(p.chapa).strip()
+                pessoas_by_chapa[chapa_str] = p.horario_codigo
+                pessoas_by_chapa[chapa_str.lstrip('0')] = p.horario_codigo
+                try:
+                    pessoas_by_chapa[str(int(chapa_str))] = p.horario_codigo
+                except ValueError:
+                    pass
+            if p.nome:
+                pessoas_by_nome[p.nome.strip().upper()] = p.horario_codigo
+
         # Process records for display
         processed_data = []
         for r in all_records:
@@ -1696,10 +1726,33 @@ def get_appointments():
             relogio_id = r.get('RelogioID')
             local = get_location_by_clock_id(relogio_id)
 
-            # Apply location filter
-            if selected_location and selected_location.strip() and selected_location != 'Todos':
+            # Apply location filter (múltiplos locais ou individual)
+            if selected_locations is not None:
+                if 'Todos' not in selected_locations and local not in selected_locations:
+                    continue
+            elif selected_location and selected_location.strip() and selected_location != 'Todos':
                 if local != selected_location:
                     continue
+
+            # Buscar vínculo de horário da pessoa no cadastro local
+            horario_cod = None
+            str_display = str(display_matricula).strip() if display_matricula is not None else ''
+            for key_to_try in [str_display, str_display.lstrip('0'), str_mat.strip(), str_mat.strip().lstrip('0')]:
+                if key_to_try and key_to_try in pessoas_by_chapa:
+                    horario_cod = pessoas_by_chapa[key_to_try]
+                    break
+            if not horario_cod and nome:
+                horario_cod = pessoas_by_nome.get(nome.strip().upper())
+
+            # Apply horario filter (múltiplos horários)
+            if selected_horarios is not None:
+                if 'Todos' not in selected_horarios:
+                    target_cod = horario_cod if horario_cod else '__SEM_HORARIO__'
+                    if target_cod not in selected_horarios and (horario_cod is None or horario_cod not in selected_horarios):
+                        continue
+
+            horario_desc = horarios_db.get(horario_cod, '') if horario_cod else ''
+            horario_label = horario_desc if horario_desc else (horario_cod if horario_cod else 'Não associado')
 
             # Apply time filter
             rec_hora = r.get('Hora')
@@ -1715,6 +1768,8 @@ def get_appointments():
                 "Matricula": display_matricula,
                 "Nome": nome,
                 "Local": local,
+                "Horario": horario_label,
+                "HorarioCodigo": horario_cod or '',
                 "RelogioID": relogio_id,
                 "NumeroSerieRep": r.get('NumeroSerieRep'),
                 "Dia": r.get('Dia'),
@@ -3556,7 +3611,7 @@ def export_excel():
         columns_order = ["Matricula", "Nome", "NomeFuncao", "Secao", "Gerencia", "Local", "DataFormatada", "HoraFormatada"]
         download_filename = 'relatorio_intersticio.xlsx'
     else:
-        columns_order = ["Matricula", "Nome", "Local", "RelogioID", "NumeroSerieRep", "DataFormatada", "HoraFormatada"]
+        columns_order = ["Matricula", "Nome", "Local", "Horario", "RelogioID", "NumeroSerieRep", "DataFormatada", "HoraFormatada"]
         download_filename = 'relatorio_ponto.xlsx'
         
     existing_cols = [col for col in columns_order if col in df.columns]
@@ -3645,13 +3700,14 @@ def export_pdf():
             download_filename = 'relatorio_intersticio.pdf'
         else:
             columns_definition = [
-                ('Matricula', 'Matrícula', 70.0),
-                ('Nome', 'Nome', 160.0),
-                ('Local', 'Local', 130.0),
-                ('RelogioID', 'Relógio', 60.0),
-                ('NumeroSerieRep', 'N. Série', 140.0),
-                ('DataFormatada', 'Data', 80.0),
-                ('HoraFormatada', 'Hora', 80.0)
+                ('Matricula', 'Matrícula', 55.0),
+                ('Nome', 'Nome', 130.0),
+                ('Local', 'Local', 95.0),
+                ('Horario', 'Horário', 110.0),
+                ('RelogioID', 'Relógio', 45.0),
+                ('NumeroSerieRep', 'N. Série', 105.0),
+                ('DataFormatada', 'Data', 60.0),
+                ('HoraFormatada', 'Hora', 60.0)
             ]
             download_filename = 'relatorio_ponto.pdf'
 

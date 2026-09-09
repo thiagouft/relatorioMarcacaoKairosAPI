@@ -6,7 +6,145 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Marcações - Kairos CPRT</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        .ms-container {
+            position: relative;
+            width: 100%;
+        }
+        .ms-trigger {
+            width: 100%;
+            min-height: 38px;
+            padding: 7px 12px;
+            border: 1px solid var(--border-gray);
+            border-radius: 6px;
+            background-color: var(--white);
+            color: var(--dark-bg);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            font-size: 0.88rem;
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+            box-sizing: border-box;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .ms-trigger:hover, .ms-trigger:focus {
+            border-color: var(--primary-blue);
+            outline: none;
+        }
+        .ms-trigger-text {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            padding-right: 8px;
+            color: #1E293B;
+            font-weight: 500;
+        }
+        .ms-trigger-icon {
+            flex-shrink: 0;
+            color: #64748B;
+            transition: transform 0.2s ease;
+        }
+        .ms-container.open .ms-trigger-icon {
+            transform: rotate(180deg);
+        }
+        .ms-dropdown {
+            display: none;
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            width: 100%;
+            min-width: 290px;
+            background-color: #FFFFFF;
+            border: 1px solid var(--border-gray);
+            border-radius: 8px;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.15), 0 8px 10px -6px rgba(0,0,0,0.1);
+            z-index: 1050;
+            padding: 10px;
+            flex-direction: column;
+            gap: 8px;
+            box-sizing: border-box;
+        }
+        .ms-container.open .ms-dropdown {
+            display: flex;
+        }
+        .ms-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--border-gray);
+        }
+        .ms-btn-action {
+            background: none;
+            border: none;
+            color: var(--primary-blue);
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 4px;
+            transition: background 0.15s;
+        }
+        .ms-btn-action:hover {
+            background-color: #F1F5F9;
+            text-decoration: underline;
+        }
+        .ms-search-input {
+            width: 100%;
+            padding: 6px 10px;
+            font-size: 0.82rem;
+            border: 1px solid var(--border-gray);
+            border-radius: 4px;
+            outline: none;
+            font-family: 'Inter', sans-serif;
+            box-sizing: border-box;
+        }
+        .ms-search-input:focus {
+            border-color: var(--primary-blue);
+        }
+        .ms-list {
+            max-height: 220px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            margin: 0;
+            padding: 0;
+        }
+        .ms-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 0.84rem;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
+            user-select: none;
+            margin: 0;
+            transition: background-color 0.15s;
+        }
+        .ms-item:hover {
+            background-color: #F8FAFC;
+        }
+        .ms-item input[type="checkbox"] {
+            cursor: pointer;
+            width: 16px;
+            height: 16px;
+            accent-color: var(--primary-blue);
+            flex-shrink: 0;
+            margin: 0;
+        }
+        .ms-item-label {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: #334155;
+        }
+    </style>
 </head>
 
 <body>
@@ -25,37 +163,100 @@
         <!-- Filters Section -->
         <div class="card">
             <h3>Filtros</h3>
-            <div class="filters">
-                <div class="filter-group">
-                    <label for="start_date">Data Início</label>
-                    <input type="date" id="start_date" class="form-control" max="2099-12-31" min="2000-01-01" value="{{ current_date }}">
+            <div class="filters" style="display: flex; flex-direction: column; gap: 15px;">
+                <!-- Primeira Linha de Filtros: Datas, Horas e Matrícula -->
+                <div style="display: flex; flex-wrap: wrap; gap: 15px; width: 100%; align-items: flex-end;">
+                    <div class="filter-group" style="flex: 1; min-width: 140px;">
+                        <label for="start_date">Data Início</label>
+                        <input type="date" id="start_date" class="form-control" max="2099-12-31" min="2000-01-01" value="{{ current_date }}">
+                    </div>
+                    <div class="filter-group" style="flex: 1; min-width: 140px;">
+                        <label for="end_date">Data Fim</label>
+                        <input type="date" id="end_date" class="form-control" max="2099-12-31" min="2000-01-01" value="{{ current_date }}">
+                    </div>
+                    <div class="filter-group" style="flex: 1; min-width: 140px;">
+                        <label for="start_time">Hora Início (Opcional)</label>
+                        <input type="time" id="start_time" class="form-control">
+                    </div>
+                    <div class="filter-group" style="flex: 1; min-width: 140px;">
+                        <label for="end_time">Hora Fim (Opcional)</label>
+                        <input type="time" id="end_time" class="form-control">
+                    </div>
+                    <div class="filter-group" style="flex: 1.2; min-width: 160px;">
+                        <label for="matricula">Matrícula (Opcional)</label>
+                        <input type="text" id="matricula" class="form-control" placeholder="Todas">
+                    </div>
                 </div>
-                <div class="filter-group">
-                    <label for="end_date">Data Fim</label>
-                    <input type="date" id="end_date" class="form-control" max="2099-12-31" min="2000-01-01" value="{{ current_date }}">
+
+                <!-- Segunda Linha de Filtros: Horário, Local e Botão Pesquisar -->
+                <div style="display: flex; flex-wrap: wrap; gap: 15px; width: 100%; align-items: flex-end;">
+                    <div class="filter-group" style="position: relative; flex: 2; min-width: 250px;">
+                        <label>Horário</label>
+                        <div class="ms-container" id="ms-horarios-container">
+                            <div class="ms-trigger" id="ms-horarios-trigger" tabindex="0" title="Clique para selecionar os horários">
+                                <span class="ms-trigger-text" id="ms-horarios-text">Todos os horários ({{ horarios|length }})</span>
+                                <svg class="ms-trigger-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </div>
+                            <div class="ms-dropdown" id="ms-horarios-dropdown">
+                                <div class="ms-header">
+                                    <span style="font-size: 0.78rem; font-weight: 600; color: #64748B; text-transform: uppercase;">Horários Cadastrados</span>
+                                    <div style="display: flex; gap: 6px;">
+                                        <button type="button" class="ms-btn-action" id="ms-horarios-select-all">Todos</button>
+                                        <span style="color: #CBD5E1;">|</span>
+                                        <button type="button" class="ms-btn-action" id="ms-horarios-clear">Limpar</button>
+                                    </div>
+                                </div>
+                                <input type="text" class="ms-search-input" id="ms-horarios-search" placeholder="Pesquisar horário...">
+                                <div class="ms-list" id="ms-horarios-list">
+                                    {% for h in horarios %}
+                                    <label class="ms-item" title="{{ h.codigo }} - {{ h.descricao }}">
+                                        <input type="checkbox" class="cb-horario" value="{{ h.codigo }}" checked>
+                                        <span class="ms-item-label"><strong>{{ h.codigo }}</strong> - {{ h.descricao }}</span>
+                                    </label>
+                                    {% endfor %}
+                                    <label class="ms-item" title="Colaboradores sem horário associado no cadastro">
+                                        <input type="checkbox" class="cb-horario" value="__SEM_HORARIO__" checked>
+                                        <span class="ms-item-label" style="color: #64748B; font-style: italic;">Sem Horário / Não associado</span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="filter-group" style="position: relative; flex: 2; min-width: 250px;">
+                        <label>Local</label>
+                        <div class="ms-container" id="ms-locais-container">
+                            <div class="ms-trigger" id="ms-locais-trigger" tabindex="0" title="Clique para selecionar os locais">
+                                <span class="ms-trigger-text" id="ms-locais-text">Todos os locais ({{ locations|length }})</span>
+                                <svg class="ms-trigger-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </div>
+                            <div class="ms-dropdown" id="ms-locais-dropdown">
+                                <div class="ms-header">
+                                    <span style="font-size: 0.78rem; font-weight: 600; color: #64748B; text-transform: uppercase;">Locais</span>
+                                    <div style="display: flex; gap: 6px;">
+                                        <button type="button" class="ms-btn-action" id="ms-locais-select-all">Todos</button>
+                                        <span style="color: #CBD5E1;">|</span>
+                                        <button type="button" class="ms-btn-action" id="ms-locais-clear">Limpar</button>
+                                    </div>
+                                </div>
+                                <input type="text" class="ms-search-input" id="ms-locais-search" placeholder="Pesquisar local...">
+                                <div class="ms-list" id="ms-locais-list">
+                                    {% for loc in locations %}
+                                    <label class="ms-item" title="{{ loc }}">
+                                        <input type="checkbox" class="cb-local" value="{{ loc }}" checked>
+                                        <span class="ms-item-label">{{ loc }}</span>
+                                    </label>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="flex: 0 0 auto; display: flex; gap: 8px;">
+                        <button id="btn-search" class="btn btn-primary" style="height: 38px; min-width: 130px;">Pesquisar</button>
+                        <button id="btn-reset" type="button" class="btn" style="height: 38px; min-width: 90px; background-color: var(--border-gray); color: var(--dark-bg); font-weight: 500;" title="Restaurar filtros padrão">Limpar</button>
+                    </div>
                 </div>
-                <div class="filter-group">
-                    <label for="start_time">Hora Início (Opcional)</label>
-                    <input type="time" id="start_time" class="form-control">
-                </div>
-                <div class="filter-group">
-                    <label for="end_time">Hora Fim (Opcional)</label>
-                    <input type="time" id="end_time" class="form-control">
-                </div>
-                <div class="filter-group">
-                    <label for="local">Local</label>
-                    <select id="local" class="form-control">
-                        <option value="Todos">Todos</option>
-                        {% for loc in locations %}
-                        <option value="{{ loc }}">{{ loc }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="filter-group">
-                    <label for="matricula">Matrícula (Opcional)</label>
-                    <input type="text" id="matricula" class="form-control" placeholder="Todas">
-                </div>
-                <button id="btn-search" class="btn btn-primary" style="width: auto;">Pesquisar</button>
             </div>
             <div id="error-msg" class="alert alert-danger" style="display: none;"></div>
         </div>
@@ -89,6 +290,9 @@
                                 <input type="checkbox" class="col-toggle-checkbox" value="Local" checked> Local
                             </label>
                             <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                                <input type="checkbox" class="col-toggle-checkbox" value="Horario" checked> Horário
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
                                 <input type="checkbox" class="col-toggle-checkbox" value="RelogioID" checked> Relógio ID
                             </label>
                             <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
@@ -115,6 +319,7 @@
                             <th class="col-Matricula">Matrícula</th>
                             <th class="col-Nome">Nome</th>
                             <th class="col-Local">Local</th>
+                            <th class="col-Horario">Horário</th>
                             <th class="col-RelogioID">Relógio ID</th>
                             <th class="col-NumeroSerieRep">NumeroSerieRep</th>
                             <th class="col-DataFormatada">Data</th>
@@ -138,11 +343,22 @@
         const itemsPerPage = 10;
         let currentPage = 1;
         const storageKeyMarcacoes = 'marcacoes_active_columns';
-        const defaultColumnsMarcacoes = ['Matricula', 'Nome', 'Local', 'RelogioID', 'DataFormatada', 'HoraFormatada'];
+        const defaultColumnsMarcacoes = ['Matricula', 'Nome', 'Local', 'Horario', 'RelogioID', 'DataFormatada', 'HoraFormatada'];
 
         const loadMarcacoesActiveColumns = () => {
             const stored = JSON.parse(localStorage.getItem(storageKeyMarcacoes));
             if (Array.isArray(stored) && stored.length > 0) {
+                // Se o usuário tem colunas salvas de versão anterior sem 'Horario', insere 'Horario'
+                if (!stored.includes('Horario') && !localStorage.getItem(storageKeyMarcacoes + '_v2')) {
+                    const localIdx = stored.indexOf('Local');
+                    if (localIdx !== -1) {
+                        stored.splice(localIdx + 1, 0, 'Horario');
+                    } else {
+                        stored.push('Horario');
+                    }
+                    localStorage.setItem(storageKeyMarcacoes, JSON.stringify(stored));
+                    localStorage.setItem(storageKeyMarcacoes + '_v2', 'true');
+                }
                 return stored;
             }
             return defaultColumnsMarcacoes.slice();
@@ -189,6 +405,136 @@
             });
         };
 
+        // --- Multi-Select Helpers ---
+        const setupMultiSelect = (config) => {
+            const container = document.getElementById(config.containerId);
+            const trigger = document.getElementById(config.triggerId);
+            const dropdown = document.getElementById(config.dropdownId);
+            const textElem = document.getElementById(config.textId);
+            const selectAllBtn = document.getElementById(config.selectAllBtnId);
+            const clearBtn = document.getElementById(config.clearBtnId);
+            const searchInput = document.getElementById(config.searchInputId);
+            const checkboxes = container.querySelectorAll('.' + config.cbClass);
+            const totalCount = checkboxes.length;
+
+            const updateTriggerText = () => {
+                const checkedCount = container.querySelectorAll('.' + config.cbClass + ':checked').length;
+                if (checkedCount === totalCount) {
+                    textElem.textContent = `${config.allLabel} (${totalCount})`;
+                } else if (checkedCount === 0) {
+                    textElem.textContent = 'Nenhum selecionado';
+                } else if (checkedCount === 1) {
+                    const firstChecked = container.querySelector('.' + config.cbClass + ':checked');
+                    const labelSpan = firstChecked.closest('.ms-item').querySelector('.ms-item-label');
+                    const labelText = labelSpan ? labelSpan.textContent.trim() : firstChecked.value;
+                    textElem.textContent = labelText.length > 25 ? labelText.substring(0, 22) + '...' : labelText;
+                } else {
+                    textElem.textContent = `${checkedCount} selecionados de ${totalCount}`;
+                }
+            };
+
+            // Toggle dropdown
+            trigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                // Fecha outros dropdowns abertos
+                document.querySelectorAll('.ms-container').forEach(c => {
+                    if (c !== container) c.classList.remove('open');
+                });
+                container.classList.toggle('open');
+                if (container.classList.contains('open') && searchInput) {
+                    searchInput.focus();
+                }
+            });
+
+            dropdown.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+
+            // Select all
+            selectAllBtn.addEventListener('click', () => {
+                checkboxes.forEach(cb => cb.checked = true);
+                updateTriggerText();
+            });
+
+            // Clear
+            clearBtn.addEventListener('click', () => {
+                checkboxes.forEach(cb => cb.checked = false);
+                updateTriggerText();
+            });
+
+            // Checkbox changes
+            checkboxes.forEach(cb => {
+                cb.addEventListener('change', updateTriggerText);
+            });
+
+            // Search filter
+            if (searchInput) {
+                searchInput.addEventListener('input', (e) => {
+                    const query = e.target.value.toLowerCase().trim();
+                    const items = container.querySelectorAll('.ms-item');
+                    items.forEach(item => {
+                        const text = item.textContent.toLowerCase();
+                        item.style.display = text.includes(query) ? 'flex' : 'none';
+                    });
+                });
+            }
+
+            updateTriggerText();
+        };
+
+        // Fecha menus multi-select ao clicar fora
+        document.addEventListener('click', (e) => {
+            document.querySelectorAll('.ms-container').forEach(c => {
+                if (!c.contains(e.target)) {
+                    c.classList.remove('open');
+                }
+            });
+        });
+
+        const initMultiSelects = () => {
+            setupMultiSelect({
+                containerId: 'ms-horarios-container',
+                triggerId: 'ms-horarios-trigger',
+                dropdownId: 'ms-horarios-dropdown',
+                textId: 'ms-horarios-text',
+                selectAllBtnId: 'ms-horarios-select-all',
+                clearBtnId: 'ms-horarios-clear',
+                searchInputId: 'ms-horarios-search',
+                cbClass: 'cb-horario',
+                allLabel: 'Todos os horários'
+            });
+
+            setupMultiSelect({
+                containerId: 'ms-locais-container',
+                triggerId: 'ms-locais-trigger',
+                dropdownId: 'ms-locais-dropdown',
+                textId: 'ms-locais-text',
+                selectAllBtnId: 'ms-locais-select-all',
+                clearBtnId: 'ms-locais-clear',
+                searchInputId: 'ms-locais-search',
+                cbClass: 'cb-local',
+                allLabel: 'Todos os locais'
+            });
+        };
+
+        const getSelectedLocais = () => {
+            const allCbs = document.querySelectorAll('.cb-local');
+            const checkedCbs = document.querySelectorAll('.cb-local:checked');
+            if (checkedCbs.length === allCbs.length) {
+                return ['Todos'];
+            }
+            return Array.from(checkedCbs).map(cb => cb.value);
+        };
+
+        const getSelectedHorarios = () => {
+            const allCbs = document.querySelectorAll('.cb-horario');
+            const checkedCbs = document.querySelectorAll('.cb-horario:checked');
+            if (checkedCbs.length === allCbs.length) {
+                return ['Todos'];
+            }
+            return Array.from(checkedCbs).map(cb => cb.value);
+        };
+
         const obterRegistrosFiltrados = () => {
             const activeCols = loadMarcacoesActiveColumns();
             if (!activeCols.length) {
@@ -209,7 +555,6 @@
             const startTimeInput = document.getElementById('start_time').value;
             const endTimeInput = document.getElementById('end_time').value;
             const matriculaInput = document.getElementById('matricula').value;
-            const localInput = document.getElementById('local').value;
             const errorMsg = document.getElementById('error-msg');
             const loading = document.getElementById('loading');
             const resultsCard = document.getElementById('results-card');
@@ -229,6 +574,20 @@
                 return;
             }
 
+            const selectedLocais = getSelectedLocais();
+            if (selectedLocais.length === 0) {
+                errorMsg.textContent = 'Por favor, selecione ao menos um Local no filtro.';
+                errorMsg.style.display = 'block';
+                return;
+            }
+
+            const selectedHorarios = getSelectedHorarios();
+            if (selectedHorarios.length === 0) {
+                errorMsg.textContent = 'Por favor, selecione ao menos um Horário no filtro.';
+                errorMsg.style.display = 'block';
+                return;
+            }
+
             // Format dates to DD-MM-YYYY for API
             const formatDate = (dateStr) => {
                 let [y, m, d] = dateStr.split('-');
@@ -242,7 +601,9 @@
                 start_date: formatDate(startDateInput),
                 end_date: formatDate(endDateInput),
                 matricula: matriculaInput,
-                local: localInput,
+                locais: selectedLocais,
+                horarios: selectedHorarios,
+                local: selectedLocais.length === 1 ? selectedLocais[0] : (selectedLocais.includes('Todos') ? 'Todos' : ''),
                 start_time: startTimeInput,
                 end_time: endTimeInput
             };
@@ -274,6 +635,45 @@
                 errorMsg.style.display = 'block';
             } finally {
                 loading.style.display = 'none';
+            }
+        });
+
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            const defaultDate = "{{ current_date }}";
+            document.getElementById('start_date').value = defaultDate;
+            document.getElementById('end_date').value = defaultDate;
+            document.getElementById('start_time').value = '';
+            document.getElementById('end_time').value = '';
+            document.getElementById('matricula').value = '';
+
+            // Restaura todos os horários selecionados
+            const cbHorarios = document.querySelectorAll('.cb-horario');
+            cbHorarios.forEach(cb => cb.checked = true);
+            const searchHorarios = document.getElementById('ms-horarios-search');
+            if (searchHorarios) {
+                searchHorarios.value = '';
+                document.querySelectorAll('#ms-horarios-list .ms-item').forEach(item => item.style.display = 'flex');
+            }
+            document.getElementById('ms-horarios-text').textContent = `Todos os horários (${cbHorarios.length})`;
+
+            // Restaura todos os locais selecionados
+            const cbLocais = document.querySelectorAll('.cb-local');
+            cbLocais.forEach(cb => cb.checked = true);
+            const searchLocais = document.getElementById('ms-locais-search');
+            if (searchLocais) {
+                searchLocais.value = '';
+                document.querySelectorAll('#ms-locais-list .ms-item').forEach(item => item.style.display = 'flex');
+            }
+            document.getElementById('ms-locais-text').textContent = `Todos os locais (${cbLocais.length})`;
+
+            // Fecha menus que possam estar abertos
+            document.querySelectorAll('.ms-container').forEach(c => c.classList.remove('open'));
+
+            // Limpa mensagens de erro
+            const errorMsg = document.getElementById('error-msg');
+            if (errorMsg) {
+                errorMsg.style.display = 'none';
+                errorMsg.textContent = '';
             }
         });
 
@@ -353,6 +753,7 @@
                     <td class="col-Matricula">${row.Matricula}</td>
                     <td class="col-Nome">${row.Nome || ''}</td>
                     <td class="col-Local">${row.Local || ''}</td>
+                    <td class="col-Horario" title="${row.HorarioCodigo || ''}">${row.Horario || ''}</td>
                     <td class="col-RelogioID">${row.RelogioID}</td>
                     <td class="col-NumeroSerieRep">${row.NumeroSerieRep}</td>
                     <td class="col-DataFormatada">${row.DataFormatada}</td>
@@ -445,7 +846,8 @@
             pagination.appendChild(createButton('Próximo', currentPage + 1, false, currentPage === totalPages));
         }
 
-        // Inicializa o estado de colunas e o menu de configuração
+        // Inicializa multi-selects, estado de colunas e o menu de configuração
+        initMultiSelects();
         markMarcacoesCheckboxes();
         setupMarcacoesColumnDropdown();
         updateMarcacoesColumnsVisibility();
