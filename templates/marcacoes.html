@@ -264,7 +264,7 @@
         <!-- Results Section -->
         <div class="card" id="results-card" style="display: none;">
             <div class="card-header" style="position: relative;">
-                <h3>Resultados</h3>
+                <h3 id="results-title">Resultados</h3>
                 <div style="display: flex; gap: 10px; width: 100%; max-width: 440px; align-items: center;">
                     <!-- Colunas Config Dropdown Container -->
                     <div class="dropdown-colunas" style="position: relative; display: inline-block;">
@@ -627,6 +627,10 @@
 
                 currentData = result.data;
                 currentPage = 1;
+                const resultsTitle = document.getElementById('results-title');
+                if (resultsTitle) {
+                    resultsTitle.textContent = `Total de registros: ${currentData.length}`;
+                }
                 renderTable();
                 renderPagination();
 
@@ -668,6 +672,12 @@
 
             // Fecha menus que possam estar abertos
             document.querySelectorAll('.ms-container').forEach(c => c.classList.remove('open'));
+
+            // Restaura título do card de resultados
+            const resultsTitle = document.getElementById('results-title');
+            if (resultsTitle) {
+                resultsTitle.textContent = 'Resultados';
+            }
 
             // Limpa mensagens de erro
             const errorMsg = document.getElementById('error-msg');
