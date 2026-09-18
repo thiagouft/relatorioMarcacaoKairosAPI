@@ -61,11 +61,46 @@ def run_relogio_automation(tipo, data_personalizada=None, relogio_ids=None):
 
         page.wait_for_selector('#btnFormLogin')
         page.click('#btnFormLogin')
-        yield "🔐 Dados de login enviados.\n"
+        yield "🔐 Dados de login enviados. Aguardando autenticação...\n"
 
-        # Wait for navigation after form submission
-        page.wait_for_load_state('domcontentloaded')
-        yield "✅ Login realizado com sucesso.\n"
+        # Aguarda a página processar o login
+        try:
+            page.wait_for_function(
+                """() => {
+                    const url = window.location.href;
+                    const hasErrors = document.querySelector('.validation-summary-errors, #divErrors');
+                    const hasSessionModal = document.querySelector('.ui-dialog, .bootbox, [id*="Desconectar"]');
+                    const isAwayFromLogin = !url.includes('/LogOn') && !url.endsWith('dimepkairos.com.br/') && !url.endsWith('dimepkairos.com.br');
+                    return isAwayFromLogin || !!hasErrors || !!hasSessionModal;
+                }""",
+                timeout=20000
+            )
+        except Exception:
+            pass
+
+        # Verifica se apareceu modal de sessão concorrente (ex: outro usuário conectado)
+        try:
+            btn_confirm = page.locator('button:has-text("Sim"), input[value="Sim"], .ui-dialog-buttonset button:first-child, button:has-text("Continuar"), #btnDesconectar')
+            if btn_confirm.count() > 0 and btn_confirm.first.is_visible():
+                yield "⚠️ Alerta de sessão anterior detectado. Confirmando desconexão...\n"
+                btn_confirm.first.click()
+                time.sleep(1.0)
+                page.wait_for_load_state('domcontentloaded', timeout=15000)
+        except Exception:
+            pass
+
+        # Verifica se houve erro explícito no login
+        try:
+            err_el = page.locator('.validation-summary-errors, #divErrors')
+            if err_el.count() > 0 and err_el.first.is_visible():
+                err_text = err_el.first.inner_text().strip().replace('\n', ' ')
+                if err_text:
+                    yield f"❌ Falha de login no Kairos: {err_text}\n"
+                    return
+        except Exception:
+            pass
+
+        yield "✅ Login processado com sucesso.\n"
 
         if tipo == 'datahora':
             yield "📅 Iniciando atualização de data e hora para os relógios selecionados...\n"
@@ -73,13 +108,50 @@ def run_relogio_automation(tipo, data_personalizada=None, relogio_ids=None):
                 target_url = f"https://www.dimepkairos.com.br/Dimep/Relogios/AgendarOperacaoRelogio/{i}?operacao=3"
                 yield f"\n🔄 Enviando comando de data e hora para o relógio {i}...\n"
                 try:
-                    page.goto(target_url, wait_until='domcontentloaded')
-                    # Wait for validation summary success or timeout
-                    page.wait_for_selector('.validation-summary-ok', timeout=10000)
-                    yield f"✅ Comando enviado com sucesso para o relógio {i}.\n"
+                    page.goto(target_url, wait_until='domcontentloaded', timeout=30000)
+                    
+                    # Aguarda qualquer feedback da página: sucesso, erro, ou volta para login
+                    feedback_selector = '.validation-summary-ok, .validation-summary-errors, #divErrors, .field-validation-error, #LogOnModel_UserName, .toast-message'
+                    page.wait_for_selector(feedback_selector, timeout=25000)
+                    
+                    # 1. Verifica se houve sucesso
+                    ok_el = page.locator('.validation-summary-ok')
+                    if ok_el.count() > 0 and ok_el.first.is_visible():
+                        msg = ok_el.first.inner_text().strip().replace('\n', ' ')
+                        yield f"✅ Comando enviado com sucesso para o relógio {i}: {msg or 'Operação agendada.'}\n"
+                    # 2. Verifica se houve erro ou aviso do Kairos
+                    elif page.locator('.validation-summary-errors, #divErrors').count() > 0 and page.locator('.validation-summary-errors, #divErrors').first.is_visible():
+                        err_msg = page.locator('.validation-summary-errors, #divErrors').first.inner_text().strip().replace('\n', ' ')
+                        yield f"⚠️ Relógio {i} (Aviso do Kairos): {err_msg}\n"
+                    # 3. Verifica se a sessão expirou e voltou para login
+                    elif page.locator('#LogOnModel_UserName').count() > 0 and page.locator('#LogOnModel_UserName').first.is_visible():
+                        yield f"❌ Relógio {i}: Sessão expirada/desconectada pelo Kairos (redirecionado para tela de login).\n"
+                    else:
+                        yield f"ℹ️ Relógio {i}: Resposta recebida da página do Kairos.\n"
+                    
                     time.sleep(0.5)
                 except Exception as inner_err:
-                    yield f"❌ Erro ao enviar comando para o relógio {i}: {str(inner_err)}\n"
+                    # Tenta capturar screenshot para diagnóstico visual
+                    ss_info = ""
+                    try:
+                        base_dir = os.path.dirname(os.path.abspath(__file__))
+                        ss_dir = os.path.join(base_dir, 'static', 'screenshots')
+                        os.makedirs(ss_dir, exist_ok=True)
+                        ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+                        ss_file = os.path.join(ss_dir, f"erro_relogio_{i}_{ts}.png")
+                        page.screenshot(path=ss_file, full_page=True)
+                        ss_info = f" [Captura salva em: static/screenshots/{os.path.basename(ss_file)}]"
+                    except Exception:
+                        pass
+                    
+                    # Obtém a URL atual para ajudar no diagnóstico
+                    curr_url_info = ""
+                    try:
+                        curr_url_info = f" (URL atual: {page.url})"
+                    except Exception:
+                        pass
+
+                    yield f"❌ Erro ao enviar comando para o relógio {i}: {str(inner_err)}{curr_url_info}{ss_info}\n"
             
             yield "\n🏁 Automação de Data e Hora concluída!\n"
 
