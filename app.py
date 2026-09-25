@@ -766,7 +766,8 @@ def agendamento_comandos():
 def comandos_agendados():
     log_action('Acessou menu de Lista de Comandos Agendados')
     permissions = get_menu_permissions()
-    return render_template('comandos_agendados.html', is_admin=session.get('is_admin'), permissions=permissions)
+    current_date = get_local_now().strftime('%Y-%m-%d')
+    return render_template('comandos_agendados.html', is_admin=session.get('is_admin'), permissions=permissions, current_date=current_date)
 
 @app.route('/admin/comandos_recorrentes')
 @app.route('/comandos_recorrentes')
@@ -1129,15 +1130,33 @@ def api_intersticio():
         if not employees:
             return jsonify({'data': []}) # No employees in this shift
 
-        # Create maps for quick lookup
+        # Create maps for quick lookup (por chapa, sem prefixo 300, nome, CPF e PIS)
         employees_map = {}
+        employees_by_nome = {}
+        employees_by_cpf = {}
+        employees_by_pis = {}
         for p in employees:
             if p.chapa:
-                employees_map[p.chapa.strip()] = p
+                ch = str(p.chapa).strip()
+                employees_map[ch] = p
+                employees_map[ch.lstrip('0')] = p
+                if ch.startswith('300') and len(ch) > 3:
+                    employees_map[ch[3:]] = p
+                    employees_map[ch[3:].lstrip('0')] = p
                 try:
-                    employees_map[str(int(p.chapa))] = p
+                    employees_map[str(int(ch))] = p
                 except ValueError:
                     pass
+            if p.nome:
+                employees_by_nome[p.nome.strip().upper()] = p
+            if p.cpf:
+                cpf_clean = ''.join(filter(str.isdigit, str(p.cpf)))
+                if cpf_clean:
+                    employees_by_cpf[cpf_clean] = p
+            if p.pis_pasep:
+                pis_clean = ''.join(filter(str.isdigit, str(p.pis_pasep)))
+                if pis_clean:
+                    employees_by_pis[pis_clean] = p
 
         # Load full employee list from Kairos search people API for translation
         employees_info = fetch_all_employees_map()
@@ -1186,20 +1205,36 @@ def api_intersticio():
         for link in links:
             gerencias_map[link.secao_codigo] = gerencias.get(link.gerencia_id, '')
 
-        # Group punches by employee (translated to DB chapa/cracha format)
+        # Group punches by employee
         employee_punches = {}
+        employee_obj_map = {}
         for r in all_records:
             mat = str(r.get('Matricula'))
             
             # Translate Kairos Matricula to DB Chapa/Cracha if possible
             emp_data = employees_info.get(mat, {})
-            cracha = emp_data.get('Cracha')
-            db_chapa = str(cracha).strip() if cracha is not None else mat
+            cracha = str(emp_data.get('Cracha', '')).strip() if emp_data.get('Cracha') is not None else ''
+            nome = emp_data.get('Nome', '').strip().upper()
+            cpf = ''.join(filter(str.isdigit, str(r.get('CPF', ''))))
+            pis = ''.join(filter(str.isdigit, str(r.get('PIS', ''))))
             
-            if db_chapa in employees_map:
-                if db_chapa not in employee_punches:
-                    employee_punches[db_chapa] = []
-                employee_punches[db_chapa].append(r)
+            p = None
+            for key_to_try in [cracha, cracha.lstrip('0'), mat, mat.lstrip('0')]:
+                if key_to_try and key_to_try in employees_map:
+                    p = employees_map[key_to_try]
+                    break
+            if not p and nome and nome in employees_by_nome:
+                p = employees_by_nome[nome]
+            if not p and cpf and cpf in employees_by_cpf:
+                p = employees_by_cpf[cpf]
+            if not p and pis and pis in employees_by_pis:
+                p = employees_by_pis[pis]
+            
+            if p:
+                if p.chapa not in employee_punches:
+                    employee_punches[p.chapa] = []
+                    employee_obj_map[p.chapa] = p
+                employee_punches[p.chapa].append(r)
 
         processed_data = []
         
@@ -1208,6 +1243,7 @@ def api_intersticio():
             # Sort punches chronologically to get the last one
             punches.sort(key=lambda x: (x.get('Hora', 0), x.get('Minuto', 0)))
             last_punch = punches[-1]
+            p = employee_obj_map[db_chapa]
             
             p_hour = last_punch.get('Hora', 0)
             p_minute = last_punch.get('Minuto', 0)
@@ -1230,7 +1266,6 @@ def api_intersticio():
                         exceeded = True
                         
             if exceeded:
-                p = employees_map[db_chapa]
                 relogio_id = last_punch.get('RelogioID')
                 local = get_location_by_clock_id(relogio_id)
                 
@@ -1364,8 +1399,25 @@ def api_intersticio_desbloquear():
                 
             clock_ids = set()
             try:
+                crachas_to_query = [int(matricula)]
+                mat_str = str(matricula).strip()
+                if mat_str.startswith('300') and len(mat_str) >= 10:
+                    try:
+                        crachas_to_query.append(int(mat_str[3:]))
+                    except ValueError:
+                        pass
+                
+                fc_res = fetch_cracha(matricula)
+                if fc_res.get('sucesso') and fc_res.get('cracha'):
+                    try:
+                        crachas_to_query.append(int(fc_res.get('cracha')))
+                    except ValueError:
+                        pass
+
+                crachas_to_query = list(dict.fromkeys(crachas_to_query))
+
                 payload = {
-                    "CrachasPessoa": [int(matricula)],
+                    "CrachasPessoa": crachas_to_query,
                     "DataInicio": start_date_str,
                     "DataFim": end_date_str,
                     "CalculoNaoAtualizado": "true",

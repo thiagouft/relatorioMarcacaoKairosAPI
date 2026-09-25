@@ -10,56 +10,81 @@ TIMEOUT = 60
 
 def fetch_cracha(cracha):
     url = "https://www.dimepkairos.com.br/RestServiceApi/People/SearchPerson"
-    payload = {"Cracha": cracha, "CarregarBiometrias": "true"}
     
-    try:
-        response = requests.post(url, json=payload, headers=Config.KAIROS_HEADERS, timeout=TIMEOUT)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get("Sucesso") and data.get("Obj"):
-                # Handle JSON string inside Obj if necessary
-                obj_data = data["Obj"]
-                if isinstance(obj_data, str):
-                    try:
-                        obj_data = json.loads(obj_data)
-                    except json.JSONDecodeError:
-                        return {"cracha": cracha, "sucesso": False, "mensagem": "Erro ao interpretar dados da API (JSON inválido)."}
-                
-                if isinstance(obj_data, list) and len(obj_data) > 0:
-                    person = obj_data[0]
-                    matricula = person.get("Matricula")
-                    nome = person.get("Nome")
-                    data_demissao = person.get("DataDemissao")
-                    templates = person.get("Template") or person.get("Templates") or []
+    # Montar tentativas de busca (Crachá direto, Matrícula limpa sem prefixo 300, etc.)
+    payloads_to_try = [{"Cracha": cracha}]
+    s_cracha = str(cracha).strip()
+    if s_cracha.startswith('300') and len(s_cracha) >= 10:
+        clean_mat = int(s_cracha[3:])
+        payloads_to_try.append({"Matricula": clean_mat})
+        payloads_to_try.append({"Cracha": clean_mat})
+    if s_cracha.isdigit():
+        payloads_to_try.append({"Matricula": int(s_cracha)})
+
+    last_error_message = "Erro desconhecido"
+    
+    for base_payload in payloads_to_try:
+        try:
+            payload = dict(base_payload)
+            payload["CarregarBiometrias"] = "true"
+            response = requests.post(url, json=payload, headers=Config.KAIROS_HEADERS, timeout=TIMEOUT)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("Sucesso") and data.get("Obj"):
+                    obj_data = data["Obj"]
+                    if isinstance(obj_data, str):
+                        try:
+                            obj_data = json.loads(obj_data)
+                        except json.JSONDecodeError:
+                            return {"cracha": cracha, "sucesso": False, "mensagem": "Erro ao interpretar dados da API (JSON inválido)."}
                     
-                    if not templates or len(templates) == 0:
+                    if isinstance(obj_data, list) and len(obj_data) > 0:
+                        person = obj_data[0]
+                        matricula = person.get("Matricula")
+                        nome = person.get("Nome")
+                        data_demissao = person.get("DataDemissao")
+                        templates = person.get("Template") or person.get("Templates") or []
+                        kairos_cracha = person.get("Cracha") if person.get("Cracha") is not None else cracha
+                        
+                        if not templates or len(templates) == 0:
+                            return {
+                                "cracha": kairos_cracha,
+                                "matricula": matricula,
+                                "matricula_informada": cracha,
+                                "sucesso": True,
+                                "semTemplates": True,
+                                "mensagem": "Não possui Biometria",
+                                "nome": nome,
+                                "id": person.get("Id")
+                            }
+                        
+                        if data_demissao and data_demissao != "01/01/1753 00:00:00":
+                            data_demissao_curta = data_demissao.split(" ")[0]
+                            return {
+                                "cracha": kairos_cracha,
+                                "matricula": matricula,
+                                "matricula_informada": cracha,
+                                "sucesso": False,
+                                "mensagem": "Funcionário Desligado",
+                                "dataDesligamento": data_demissao_curta,
+                                "nome": nome,
+                                "id": person.get("Id")
+                            }
+                        
                         return {
-                            "cracha": cracha,
+                            "cracha": kairos_cracha,
+                            "matricula": matricula,
+                            "matricula_informada": cracha,
+                            "nome": nome,
                             "sucesso": True,
-                            "semTemplates": True,
-                            "mensagem": "Não possui Biometria",
-                            "nome": nome,
                             "id": person.get("Id")
                         }
-                    
-                    if data_demissao and data_demissao != "01/01/1753 00:00:00":
-                        data_demissao_curta = data_demissao.split(" ")[0]
-                        return {
-                            "cracha": cracha,
-                            "sucesso": False,
-                            "mensagem": "Funcionário Desligado",
-                            "dataDesligamento": data_demissao_curta,
-                            "nome": nome,
-                            "id": person.get("Id")
-                        }
-                    
-                    return {"cracha": cracha, "matricula": matricula, "nome": nome, "sucesso": True, "id": person.get("Id")}
-        
-        mensagem_erro = data.get("Mensagem") if 'data' in locals() and data else "Erro desconhecido"
-        return {"cracha": cracha, "sucesso": False, "mensagem": mensagem_erro}
-        
-    except Exception as e:
-        return {"cracha": cracha, "sucesso": False, "mensagem": str(e)}
+                if data.get("Mensagem"):
+                    last_error_message = data.get("Mensagem")
+        except Exception as e:
+            last_error_message = str(e)
+            
+    return {"cracha": cracha, "sucesso": False, "mensagem": last_error_message}
 
 def unassociate_clocks(cracha_list, relogio_list):
     url = "https://www.dimepkairos.com.br/RestServiceApi/Clock/UnassociateClocks"
