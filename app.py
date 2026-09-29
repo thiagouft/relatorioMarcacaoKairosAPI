@@ -3941,14 +3941,27 @@ def cadastros_pessoas():
         horarios_map = {h.codigo: h.descricao for h in db.query(Horario).all()}
         situacoes_map = {sit.id: sit.descricao for sit in db.query(Situacao).all()}
         
+        gerencias = {g.id: g.nome for g in db.query(Gerencia).all()}
+        links = db.query(GerenciaSecao).all()
+        gerencias_secao_map = {}
+        for link in links:
+            g_nome = gerencias.get(link.gerencia_id)
+            if g_nome:
+                if link.secao_codigo not in gerencias_secao_map:
+                    gerencias_secao_map[link.secao_codigo] = []
+                if g_nome not in gerencias_secao_map[link.secao_codigo]:
+                    gerencias_secao_map[link.secao_codigo].append(g_nome)
+        
         pessoas_data = []
         for p in pessoas_list:
+            gerente_str = ', '.join(gerencias_secao_map.get(p.secao_codigo, [])) if p.secao_codigo in gerencias_secao_map else ''
             pessoas_data.append({
                 'chapa': p.chapa,
                 'nome': p.nome,
                 'nome_funcao': p.nome_funcao,
                 'secao_codigo': p.secao_codigo,
                 'secao_desc': secoes_map.get(p.secao_codigo, ''),
+                'gerente': gerente_str,
                 'horario_codigo': p.horario_codigo,
                 'horario_desc': horarios_map.get(p.horario_codigo, ''),
                 'situacao_desc': situacoes_map.get(p.situacao_id, ''),
@@ -4088,17 +4101,29 @@ def api_cadastros_pessoas_exportar():
         horarios_map = {h.codigo: h.descricao for h in db.query(Horario).all()}
         situacoes_map = {sit.id: sit.descricao for sit in db.query(Situacao).all()}
 
+        gerencias = {g.id: g.nome for g in db.query(Gerencia).all()}
+        links = db.query(GerenciaSecao).all()
+        gerencias_secao_map = {}
+        for link in links:
+            g_nome = gerencias.get(link.gerencia_id)
+            if g_nome:
+                if link.secao_codigo not in gerencias_secao_map:
+                    gerencias_secao_map[link.secao_codigo] = []
+                if g_nome not in gerencias_secao_map[link.secao_codigo]:
+                    gerencias_secao_map[link.secao_codigo].append(g_nome)
+
         colunas_param = request.args.get('colunas', '').strip()
         if colunas_param:
             cols_list = [c.strip() for c in colunas_param.split(',') if c.strip()]
         else:
-            cols_list = ['chapa', 'nome', 'funcao', 'secao', 'situacao']
+            cols_list = ['chapa', 'nome', 'funcao', 'secao', 'gerente', 'situacao']
 
         colunas_map = {
             'chapa': ('Chapa', lambda p: p.chapa),
             'nome': ('Nome', lambda p: p.nome),
             'funcao': ('Função', lambda p: p.nome_funcao or 'Não informada'),
             'secao': ('Seção', lambda p: secoes_map.get(p.secao_codigo, 'Não associada')),
+            'gerente': ('Gerente', lambda p: ', '.join(gerencias_secao_map.get(p.secao_codigo, [])) if gerencias_secao_map.get(p.secao_codigo) else 'Sem gerente definido'),
             'horario': ('Horário', lambda p: horarios_map.get(p.horario_codigo, 'Não associado')),
             'situacao': ('Situação', lambda p: situacoes_map.get(p.situacao_id, 'Não informada')),
             'pis': ('PIS/PASEP', lambda p: p.pis_pasep or '-'),
@@ -4113,7 +4138,7 @@ def api_cadastros_pessoas_exportar():
         # Filter active columns
         cols_list = [c for c in cols_list if c in colunas_map]
         if not cols_list:
-            cols_list = ['chapa', 'nome', 'funcao', 'secao', 'situacao']
+            cols_list = ['chapa', 'nome', 'funcao', 'secao', 'gerente', 'situacao']
 
         records = []
         for p in pessoas_list:
@@ -4197,6 +4222,7 @@ def api_cadastros_pessoas_exportar():
                 'nome': 130,
                 'funcao': 100,
                 'secao': 120,
+                'gerente': 110,
                 'horario': 120,
                 'situacao': 70,
                 'pis': 70,
@@ -4251,11 +4277,21 @@ def cadastros_pessoa_detalhe(chapa):
         horario = db.query(Horario).filter_by(codigo=p.horario_codigo).first()
         situacao = db.query(Situacao).filter_by(id=p.situacao_id).first()
         
+        gerente_nome = None
+        if p.secao_codigo:
+            links = db.query(GerenciaSecao).filter_by(secao_codigo=p.secao_codigo).all()
+            if links:
+                mgrs = [db.query(Gerencia).get(l.gerencia_id) for l in links]
+                nomes = [m.nome for m in mgrs if m]
+                if nomes:
+                    gerente_nome = ', '.join(nomes)
+
         permissions = get_menu_permissions()
         return render_template(
             'cadastros_pessoa_detalhe.html',
             pessoa=p,
             secao=secao,
+            gerente=gerente_nome,
             horario=horario,
             situacao=situacao,
             permissions=permissions,

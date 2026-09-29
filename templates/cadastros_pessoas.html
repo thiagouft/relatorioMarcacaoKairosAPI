@@ -152,6 +152,9 @@
                             <input type="checkbox" class="col-toggle-checkbox" value="secao" checked> Seção
                         </label>
                         <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
+                            <input type="checkbox" class="col-toggle-checkbox" value="gerente" checked> Gerente
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
                             <input type="checkbox" class="col-toggle-checkbox" value="horario"> Horário
                         </label>
                         <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; padding: 2px 0; font-family: 'Inter', sans-serif;">
@@ -190,6 +193,7 @@
                             <th class="col-nome">Nome</th>
                             <th class="col-funcao">Nome Função</th>
                             <th class="col-secao">Seção</th>
+                            <th class="col-gerente">Gerente</th>
                             <th class="col-horario">Horário</th>
                             <th class="col-situacao">Situação</th>
                             <th class="col-pis">PIS/PASEP</th>
@@ -217,6 +221,13 @@
                                 </td>
                                 <td class="col-funcao">{{ p.nome_funcao or 'Não informada' }}</td>
                                 <td class="col-secao"><span title="{{ p.secao_codigo }}">{{ p.secao_desc or 'Não associada' }}</span></td>
+                                <td class="col-gerente">
+                                    {% if p.gerente %}
+                                    <span>{{ p.gerente }}</span>
+                                    {% else %}
+                                    <span style="color: var(--text-gray); font-style: italic;">Sem gerente definido</span>
+                                    {% endif %}
+                                </td>
                                 <td class="col-horario"><span title="{{ p.horario_codigo }}">{{ p.horario_desc or 'Não associado' }}</span></td>
                                 <td class="col-situacao">
                                     {% if p.situacao_desc == 'Ativo' %}
@@ -247,7 +258,7 @@
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td colspan="14" style="text-align: center; color: var(--text-gray); font-style: italic;">Nenhum funcionário encontrado.</td>
+                                <td colspan="15" style="text-align: center; color: var(--text-gray); font-style: italic;">Nenhum funcionário encontrado.</td>
                             </tr>
                         {% endif %}
                     </tbody>
@@ -317,12 +328,25 @@
         inputDemissaoFim.addEventListener('change', updateColumnsVisibility);
 
         // Colunas padrão
-        const defaultCols = ['chapa', 'nome', 'funcao', 'secao', 'situacao'];
+        const defaultCols = ['chapa', 'nome', 'funcao', 'secao', 'gerente', 'situacao'];
         
         // Ler do localStorage
-        let activeCols = JSON.parse(localStorage.getItem('pessoas_active_columns'));
+        let activeCols = JSON.parse(localStorage.getItem('pessoas_active_columns_v2'));
         if (!activeCols || !Array.isArray(activeCols)) {
-            activeCols = defaultCols;
+            const oldCols = JSON.parse(localStorage.getItem('pessoas_active_columns'));
+            if (oldCols && Array.isArray(oldCols)) {
+                activeCols = [...oldCols];
+                if (!activeCols.includes('gerente')) {
+                    const secaoIdx = activeCols.indexOf('secao');
+                    if (secaoIdx !== -1) {
+                        activeCols.splice(secaoIdx + 1, 0, 'gerente');
+                    } else {
+                        activeCols.push('gerente');
+                    }
+                }
+            } else {
+                activeCols = defaultCols;
+            }
         }
         
         // Sempre forçar 'acoes' na listagem
@@ -355,6 +379,7 @@
             acoesCells.forEach(cell => cell.style.display = '');
 
             // Salvar no localStorage
+            localStorage.setItem('pessoas_active_columns_v2', JSON.stringify(currentActive));
             localStorage.setItem('pessoas_active_columns', JSON.stringify(currentActive));
             
             // Atualizar links de exportação

@@ -81,6 +81,17 @@
                 </div>
 
                 <div class="detail-item">
+                    <div class="detail-label">Gerente (Gerência)</div>
+                    <div class="detail-value">
+                        {% if gerente %}
+                        <span style="font-weight: 600;">{{ gerente }}</span>
+                        {% else %}
+                        <span style="color: var(--text-gray); font-style: italic;">Sem gerente definido</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="detail-item">
                     <div class="detail-label">Horário de Trabalho</div>
                     <div class="detail-value">
                         {% if horario %}
