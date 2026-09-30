@@ -1130,9 +1130,8 @@ def api_intersticio():
         if not employees:
             return jsonify({'data': []}) # No employees in this shift
 
-        # Create maps for quick lookup (por chapa, sem prefixo 300, nome, CPF e PIS)
+        # Create maps for quick lookup (por chapa, sem prefixo 300, CPF e PIS - identificadores unicos)
         employees_map = {}
-        employees_by_nome = {}
         employees_by_cpf = {}
         employees_by_pis = {}
         for p in employees:
@@ -1147,8 +1146,6 @@ def api_intersticio():
                     employees_map[str(int(ch))] = p
                 except ValueError:
                     pass
-            if p.nome:
-                employees_by_nome[p.nome.strip().upper()] = p
             if p.cpf:
                 cpf_clean = ''.join(filter(str.isdigit, str(p.cpf)))
                 if cpf_clean:
@@ -1214,7 +1211,6 @@ def api_intersticio():
             # Translate Kairos Matricula to DB Chapa/Cracha if possible
             emp_data = employees_info.get(mat, {})
             cracha = str(emp_data.get('Cracha', '')).strip() if emp_data.get('Cracha') is not None else ''
-            nome = emp_data.get('Nome', '').strip().upper()
             cpf = ''.join(filter(str.isdigit, str(r.get('CPF', ''))))
             pis = ''.join(filter(str.isdigit, str(r.get('PIS', ''))))
             
@@ -1223,8 +1219,6 @@ def api_intersticio():
                 if key_to_try and key_to_try in employees_map:
                     p = employees_map[key_to_try]
                     break
-            if not p and nome and nome in employees_by_nome:
-                p = employees_by_nome[nome]
             if not p and cpf and cpf in employees_by_cpf:
                 p = employees_by_cpf[cpf]
             if not p and pis and pis in employees_by_pis:
@@ -4732,23 +4726,30 @@ def cadastros_importar_ferias():
                     return None
                 return s
 
-            def parse_dt(val):
-                if pd.isna(val):
+            def parse_dt(val, col_name, row_idx, chapa_val):
+                if pd.isna(val) or val is None or str(val).strip() == '':
                     return None
+                dt_obj = None
                 if isinstance(val, (datetime.datetime, datetime.date)):
-                    return val
-                try:
-                    return pd.to_datetime(val).to_pydatetime()
-                except Exception:
-                    return None
+                    dt_obj = val
+                else:
+                    try:
+                        dt_obj = pd.to_datetime(val).to_pydatetime()
+                    except Exception:
+                        raise ValueError(f"Formato de data inválido '{val}' na coluna {col_name} (linha {row_idx + 2}, chapa {chapa_val}).")
+                
+                if dt_obj:
+                    if dt_obj.year < 1900 or dt_obj.year > 2100:
+                        raise ValueError(f"Data com ano fora do intervalo '{val}' na coluna {col_name} (linha {row_idx + 2}, chapa {chapa_val}). Verifique se o ano possui 4 dígitos (ex: 2026).")
+                return dt_obj
 
-            for _, row in df.iterrows():
+            for idx, row in df.iterrows():
                 chapa = clean_numeric_str(row.iloc[mapping['chapa']]) if mapping['chapa'] is not None else None
                 if not chapa:
                     continue
 
-                data_ini = parse_dt(row.iloc[mapping['data_inicio']]) if mapping['data_inicio'] is not None else None
-                data_fim = parse_dt(row.iloc[mapping['data_fim']]) if mapping['data_fim'] is not None else None
+                data_ini = parse_dt(row.iloc[mapping['data_inicio']], 'DATA INÍCIO', idx, chapa) if mapping['data_inicio'] is not None else None
+                data_fim = parse_dt(row.iloc[mapping['data_fim']], 'DATA FIM', idx, chapa) if mapping['data_fim'] is not None else None
 
                 p = db.query(Pessoa).filter_by(chapa=chapa).first()
                 if p:
