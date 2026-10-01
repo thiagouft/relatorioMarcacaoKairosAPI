@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file, Response, stream_with_context
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, or_, and_
 from sqlalchemy.orm import sessionmaker
 from werkzeug.security import check_password_hash, generate_password_hash
 import requests
@@ -1125,8 +1125,26 @@ def api_intersticio():
 
     db = get_db_session()
     try:
-        # Get employees of selected shift
-        employees = db.query(Pessoa).filter_by(horario_codigo=target_horario_codigo).all()
+        # Obter situação de demitido
+        sit_demitido = db.query(Situacao).filter(Situacao.descricao.ilike('%Demitid%')).first()
+        demitido_id = sit_demitido.id if sit_demitido else 1
+        dt_end_of_day = datetime.datetime(dt.year, dt.month, dt.day, 23, 59, 59)
+
+        # Get active employees of selected shift (ignoring employees dismissed on or before the selected date)
+        employees_query = db.query(Pessoa).filter(
+            Pessoa.horario_codigo == target_horario_codigo
+        ).filter(
+            or_(
+                Pessoa.data_demissao.is_(None),
+                Pessoa.data_demissao > dt_end_of_day
+            )
+        )
+        if demitido_id:
+            employees_query = employees_query.filter(
+                ~and_(Pessoa.situacao_id == demitido_id, Pessoa.data_demissao.is_(None))
+            )
+
+        employees = employees_query.all()
         if not employees:
             return jsonify({'data': []}) # No employees in this shift
 
