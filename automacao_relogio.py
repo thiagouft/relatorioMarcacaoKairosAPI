@@ -32,10 +32,27 @@ def run_relogio_automation(tipo, data_personalizada=None, relogio_ids=None):
         data_personalizada = get_previous_date()
 
     if relogio_ids is None:
-        # Default clock IDs: 1 to 32, plus 35 and 36
-        relogio_ids = list(range(1, 33)) + [35, 36]
+        # Busca dinamicamente todos os relógios ativos na API do Kairos
+        try:
+            from utils_envio_comando import fetch_clocks
+            clocks = fetch_clocks()
+            if clocks:
+                raw_ids = [
+                    c.get('RelogioNumero')
+                    for c in clocks
+                    if c.get('RelogioNumero') is not None and not c.get('RelogioDesativado')
+                ]
+                # Mapeia IDs para acesso às URLs web do Kairos (33 -> 35, 34 -> 36, 37 permanece 37)
+                relogio_ids = [35 if rid == 33 else 36 if rid == 34 else rid for rid in raw_ids]
+        except Exception as err:
+            print(f"Aviso: Não foi possível obter relógios dinamicamente ({err}). Usando lista padrão.")
+            relogio_ids = None
+
+        if not relogio_ids:
+            # Fallback padrão incluindo os relógios 1 a 32, 35, 36 e o novo relógio 37
+            relogio_ids = list(range(1, 33)) + [35, 36, 37]
     else:
-        # Map selectable clock IDs 33 -> 35 and 34 -> 36 for URL access
+        # Mapeia IDs selecionáveis: 33 -> 35 e 34 -> 36 para acesso às URLs web (o relógio 37 permanece 37)
         relogio_ids = [35 if rid == 33 else 36 if rid == 34 else rid for rid in relogio_ids]
 
     yield "🔄 Iniciando automação com Playwright...\n"

@@ -150,7 +150,8 @@ INITIAL_CLOCK_GROUPS = {
     "NAUTICA": [30],
     "PI SAO FELIX": [33, 34],
     "CENTRAL DE CONCRETO III": [7, 15],
-    "P12": [27, 32]
+    "P12": [27, 32],
+    "CANTEIRO II": [37]
 }
 
 
