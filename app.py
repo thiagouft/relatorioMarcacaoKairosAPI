@@ -312,7 +312,8 @@ def login():
                     'hora_extra_acumulada': False,
                     'cadastros': False,
                     'intersticio': False,
-                    'exportar_csv': False
+                    'exportar_csv': False,
+                    'extrato_consignado': False
                 })
                 db.commit()
             session['user_id'] = user.id
@@ -386,7 +387,8 @@ def get_menu_permissions():
             "hora_extra_acumulada": True,
             "cadastros": True,
             "intersticio": True,
-            "exportar_csv": True
+            "exportar_csv": True,
+            "extrato_consignado": True
         }
     db = get_db_session()
     user = db.query(User).get(session.get('user_id'))
@@ -479,7 +481,8 @@ def update_permissions(user_id):
         'hora_extra_acumulada': 'hora_extra_acumulada' in request.form,
         'cadastros': 'cadastros' in request.form,
         'intersticio': 'intersticio' in request.form,
-        'exportar_csv': 'exportar_csv' in request.form
+        'exportar_csv': 'exportar_csv' in request.form,
+        'extrato_consignado': 'extrato_consignado' in request.form
     }
     is_admin = 'is_admin' in request.form
     db = get_db_session()
@@ -1010,6 +1013,136 @@ def exportar_csv():
         permissions=permissions,
         current_date=current_date
     )
+
+@app.route('/extrato_consignado')
+@permission_required('extrato_consignado')
+def extrato_consignado():
+    log_action('Acessou menu de Extrato Consignado')
+    permissions = get_menu_permissions()
+    return render_template(
+        'extrato_consignado.html',
+        is_admin=session.get('is_admin'),
+        permissions=permissions
+    )
+
+@app.route('/api/extrato_consignado/analisar', methods=['POST'])
+@permission_required('extrato_consignado')
+def api_extrato_consignado_analisar():
+    import extrato_consignado_service as ecs
+    import uuid, tempfile
+    
+    if 'pdf_file' not in request.files:
+        return jsonify({'sucesso': False, 'mensagem': 'Nenhum arquivo enviado.'}), 400
+        
+    file = request.files['pdf_file']
+    if file.filename == '':
+        return jsonify({'sucesso': False, 'mensagem': 'Nenhum arquivo selecionado.'}), 400
+        
+    if not file.filename.lower().endswith('.pdf'):
+        return jsonify({'sucesso': False, 'mensagem': 'Formato inválido. O arquivo selecionado deve ser um PDF (.pdf).'}), 400
+        
+    try:
+        file_bytes = file.read()
+        if not file_bytes:
+            return jsonify({'sucesso': False, 'mensagem': 'O arquivo PDF está vazio.'}), 400
+            
+        stream = io.BytesIO(file_bytes)
+        is_valid, msg, metadados = ecs.validar_padrao_pdf(stream)
+        if not is_valid:
+            return jsonify({'sucesso': False, 'mensagem': msg}), 400
+            
+        stream.seek(0)
+        df_detalhado, meta_extra = ecs.extrair_extrato_pdf(stream)
+        if df_detalhado.empty:
+            return jsonify({'sucesso': False, 'mensagem': 'Nenhum lançamento foi identificado no PDF.'}), 400
+            
+        df_consolidado = ecs.consolidar_por_colaborador(df_detalhado)
+        
+        total_linhas = len(df_detalhado)
+        total_colaboradores = len(df_consolidado)
+        valor_total = round(float(df_detalhado['Valor Consignado na Guia'].sum()), 2)
+        competencia = str(df_detalhado['Comp. Apuração'].iloc[0]) if not df_detalhado.empty else ''
+        vencimento = str(df_detalhado['Vencimento'].iloc[0]) if not df_detalhado.empty else ''
+        
+        resumo = {
+            'total_linhas': total_linhas,
+            'total_colaboradores': total_colaboradores,
+            'valor_total': valor_total,
+            'competencia': competencia,
+            'vencimento': vencimento
+        }
+        
+        # Prévia das primeiras 10 linhas
+        previa = df_detalhado.head(10).to_dict(orient='records')
+        
+        # Salva dados em cache temporário por token UUID
+        token = uuid.uuid4().hex
+        temp_dir = tempfile.gettempdir()
+        cache_data = {
+            'detalhado': df_detalhado.to_dict(orient='records'),
+            'consolidado': df_consolidado.to_dict(orient='records')
+        }
+        cache_path = os.path.join(temp_dir, f"consignado_cache_{token}.json")
+        with open(cache_path, 'w', encoding='utf-8') as f_cache:
+            json.dump(cache_data, f_cache)
+            
+        log_action(f'Analisou Extrato de Consignado: {file.filename} ({total_linhas} lançamentos, {total_colaboradores} colaboradores, R$ {valor_total:,.2f})')
+        
+        return jsonify({
+            'sucesso': True,
+            'token': token,
+            'metadados': metadados,
+            'resumo': resumo,
+            'previa': previa
+        })
+        
+    except Exception as e:
+        return jsonify({'sucesso': False, 'mensagem': f'Erro ao processar PDF: {str(e)}'}), 500
+
+@app.route('/extrato_consignado/download/<token>/<tipo>')
+@permission_required('extrato_consignado')
+def extrato_consignado_download(token, tipo):
+    import extrato_consignado_service as ecs
+    import tempfile, re
+    
+    # Validação do token contra path traversal
+    if not token or not re.match(r'^[a-f0-9]{32}$', token):
+        flash('Token de download inválido.', 'danger')
+        return redirect(url_for('extrato_consignado'))
+        
+    temp_dir = tempfile.gettempdir()
+    cache_path = os.path.join(temp_dir, f"consignado_cache_{token}.json")
+    if not os.path.exists(cache_path):
+        flash('Os dados processados expiraram ou não foram encontrados. Por favor, selecione e processe o arquivo novamente.', 'warning')
+        return redirect(url_for('extrato_consignado'))
+        
+    try:
+        with open(cache_path, 'r', encoding='utf-8') as f_cache:
+            cache_data = json.load(f_cache)
+            
+        if tipo == 'detalhado':
+            df = pd.DataFrame(cache_data.get('detalhado', []))
+            output = ecs.gerar_excel_detalhado(df)
+            filename = 'consignado.xlsx'
+            log_action('Baixou Extrato Consignado Detalhado')
+        elif tipo == 'consolidado':
+            df = pd.DataFrame(cache_data.get('consolidado', []))
+            output = ecs.gerar_excel_consolidado(df)
+            filename = 'consignado_consolidado.xlsx'
+            log_action('Baixou Extrato Consignado Consolidado por Colaborador')
+        else:
+            flash('Tipo de extrato inválido.', 'danger')
+            return redirect(url_for('extrato_consignado'))
+            
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        flash(f'Erro ao gerar planilha Excel: {str(e)}', 'danger')
+        return redirect(url_for('extrato_consignado'))
 
 @app.route('/processar_hora_extra', methods=['POST'])
 @login_required

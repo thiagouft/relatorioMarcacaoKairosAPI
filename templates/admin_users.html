@@ -137,6 +137,10 @@
                             <input type="checkbox" id="perm_exportar_csv" name="exportar_csv">
                             Exportação CSV
                         </label>
+                        <label>
+                            <input type="checkbox" id="perm_extrato_consignado" name="extrato_consignado">
+                            Extrato Consignado
+                        </label>
                     </div>
                 </div>
 
@@ -237,6 +241,7 @@
             document.getElementById('perm_hora_extra_acumulada').checked = permissions.hora_extra_acumulada === true;
             document.getElementById('perm_intersticio').checked = permissions.intersticio === true;
             document.getElementById('perm_exportar_csv').checked = permissions.exportar_csv === true;
+            document.getElementById('perm_extrato_consignado').checked = permissions.extrato_consignado === true;
             document.getElementById('perm_cadastros').checked = permissions.cadastros === true;
         }
 

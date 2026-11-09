@@ -54,15 +54,18 @@
                 {% endif %}
 
                 <!-- 3. Ferramentas -->
-                {% if is_admin or permissions.hora_extra_acumulada or permissions.exportar_csv %}
+                {% if is_admin or permissions.hora_extra_acumulada or permissions.exportar_csv or permissions.extrato_consignado %}
                 <div class="dropdown">
-                    <button class="dropbtn" {% if active_page in ['hora_extra_acumulada', 'exportar_csv'] %}style="font-weight: bold; border-bottom: 2px solid var(--accent-color);"{% endif %}>Ferramentas</button>
+                    <button class="dropbtn" {% if active_page in ['hora_extra_acumulada', 'exportar_csv', 'extrato_consignado'] %}style="font-weight: bold; border-bottom: 2px solid var(--accent-color);"{% endif %}>Ferramentas</button>
                     <div class="dropdown-content">
                         {% if is_admin or permissions.hora_extra_acumulada %}
                         <a href="{{ url_for('hora_extra_acumulada') }}">Hora Extra Acumulada</a>
                         {% endif %}
                         {% if is_admin or permissions.exportar_csv %}
                         <a href="{{ url_for('exportar_csv') }}">Exportação CSV</a>
+                        {% endif %}
+                        {% if is_admin or permissions.extrato_consignado %}
+                        <a href="{{ url_for('extrato_consignado') }}">Extrato Consignado</a>
                         {% endif %}
                     </div>
                 </div>
