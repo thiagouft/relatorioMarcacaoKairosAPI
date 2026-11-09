@@ -575,7 +575,22 @@
                     body: formData
                 });
 
-                const data = await response.json();
+                const text = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch (parseErr) {
+                    if (response.status === 401 || response.status === 403 || response.redirected) {
+                        showError('Acesso não autorizado ou sessão expirada. Por favor, recarregue a página e faça login novamente.');
+                    } else if (response.status === 413) {
+                        showError('O arquivo é muito grande para o servidor (limite de upload excedido).');
+                    } else if (response.status >= 500) {
+                        showError('Erro interno no servidor de produção (HTTP 500). Verifique se o pacote pdfplumber está instalado no servidor ("pip install pdfplumber") e se o serviço foi reiniciado.');
+                    } else {
+                        showError(`Resposta inesperada do servidor (HTTP ${response.status}). Verifique se todos os arquivos novos foram enviados ao servidor.`);
+                    }
+                    return;
+                }
 
                 if (!response.ok || !data.sucesso) {
                     showError(data.mensagem || 'Falha ao processar o arquivo PDF.');

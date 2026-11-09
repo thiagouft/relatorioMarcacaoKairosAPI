@@ -91,6 +91,8 @@ def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
+            if request.path.startswith('/api/'):
+                return jsonify({'sucesso': False, 'mensagem': 'Sessão expirada. Por favor, faça login novamente.'}), 401
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
@@ -100,6 +102,8 @@ def permission_required(permission_name=None):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             if 'user_id' not in session:
+                if request.path.startswith('/api/'):
+                    return jsonify({'sucesso': False, 'mensagem': 'Sessão expirada. Por favor, faça login novamente.'}), 401
                 return redirect(url_for('login'))
                 
             if session.get('is_admin'):
@@ -108,10 +112,14 @@ def permission_required(permission_name=None):
             if permission_name:
                 permissions = get_menu_permissions()
                 if not permissions.get(permission_name):
+                    if request.path.startswith('/api/'):
+                        return jsonify({'sucesso': False, 'mensagem': 'Acesso negado. Você não tem permissão para esta operação.'}), 403
                     flash('Acesso negado. Você não tem permissão para acessar esta página.', 'danger')
                     return redirect(url_for('home'))
                 return f(*args, **kwargs)
                 
+            if request.path.startswith('/api/'):
+                return jsonify({'sucesso': False, 'mensagem': 'Acesso negado. Requer privilégios de administrador.'}), 403
             flash('Acesso negado. Requer privilégios de administrador.', 'danger')
             return redirect(url_for('home'))
         return decorated_function
@@ -1028,8 +1036,15 @@ def extrato_consignado():
 @app.route('/api/extrato_consignado/analisar', methods=['POST'])
 @permission_required('extrato_consignado')
 def api_extrato_consignado_analisar():
-    import extrato_consignado_service as ecs
     import uuid, tempfile
+    
+    try:
+        import extrato_consignado_service as ecs
+    except ImportError as ie:
+        return jsonify({
+            'sucesso': False, 
+            'mensagem': f'Módulo necessário não encontrado no servidor ({str(ie)}). Verifique se o pacote pdfplumber foi instalado ("pip install pdfplumber") e se o arquivo extrato_consignado_service.py foi enviado.'
+        }), 500
     
     if 'pdf_file' not in request.files:
         return jsonify({'sucesso': False, 'mensagem': 'Nenhum arquivo enviado.'}), 400
